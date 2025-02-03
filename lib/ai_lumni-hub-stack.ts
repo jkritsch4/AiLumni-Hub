@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import { IamResource } from 'aws-cdk-lib/aws-appsync';
 import { Construct } from 'constructs';
 import path = require('path');
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -37,7 +38,12 @@ export class AiLumniHubStack extends cdk.Stack {
       }
     })
 
-    // define lambdas
+    // define lambdas roles and lambdas
+    const apigInvokePrincipal = new cdk.aws_iam.ServicePrincipal('apigateway.amazonaws.com');
+    const apigInvokeRole = new cdk.aws_iam.Role(this, 'apig-lambda-invoke-role', {
+      assumedBy: apigInvokePrincipal
+    })
+
     const lambdaEnvironment = {
       PROCESSOR_TABLE_NAME: processorTable.tableName,
       SOURCE_EMAIL: 'cade11kritsch@yahoo.com',
@@ -53,6 +59,15 @@ export class AiLumniHubStack extends cdk.Stack {
       environment: lambdaEnvironment,
       memorySize: 128
     })
+    bedrockNotificationProcessorLambda.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
+      actions: [
+        'bedrock:ListFoundationModels',
+        'ses:SendEmail',
+        'ses:SendRawEmail'
+      ],
+      resources: ['*']
+    }));
+    processorTable.grantReadWriteData(bedrockNotificationProcessorLambda)
 
     const webhookEventProcessor = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'webhook-event-processor-lambda', {
       runtime: cdk.aws_lambda.Runtime.NODEJS_20_X,
@@ -61,6 +76,8 @@ export class AiLumniHubStack extends cdk.Stack {
       environment: lambdaEnvironment,
       memorySize: 128
     })
+    webhookEventProcessor.grantInvoke(apigInvokeRole)
+    processorTable.grantReadWriteData(webhookEventProcessor)
 
     // define enventbridge rule assigned to notification lambda
     const notificationCronJob = new cdk.aws_events.Rule(this, 'trigger-bedrock-job-daily', {

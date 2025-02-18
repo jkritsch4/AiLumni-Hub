@@ -80,7 +80,12 @@ export class AiLumniHubStack extends cdk.Stack {
       actions: [
         'bedrock:ListFoundationModels',
         'ses:SendEmail',
-        'ses:SendRawEmail'
+        'ses:SendRawEmail',
+        'bedrock:*',
+        'dynamodb:*',
+        "aws-marketplace:ViewSubscriptions",
+        "aws-marketplace:Subscribe",
+        "aws-marketplace:Unsubscribe"
       ],
       resources: ['*']
     }));

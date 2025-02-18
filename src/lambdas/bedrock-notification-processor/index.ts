@@ -31,17 +31,19 @@ export async function handler(event: any) {
         throw new Error(`record with game id ${gameId} not found`)
     }
 
-    const bedrockPrompt = 'Generate a push notification that summarizes this event';
+    const bedrockPrompt = `Generate a push notification that summarizes this event: ${getItemResponse.Item}`;
     // train bedrock client on data
     const invokeModelCommand = new InvokeModelCommand({
         modelId: 'athropic.claude-v2',
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
-            prompt: bedrockPrompt,
+            prompt: JSON.stringify(bedrockPrompt),
             max_tokens: 100
         })
     });
+
+    console.log("investigating model command", invokeModelCommand);
     const bedrockResponse = await bedrockClient.send(invokeModelCommand);
     console.log("investigating bedrockResponse", bedrockResponse);
 
@@ -49,7 +51,7 @@ export async function handler(event: any) {
     const bedrockResponseBody = JSON.parse(new TextDecoder().decode(bedrockResponse.body));
     const message = bedrockResponseBody.completion.trim();
     console.log("investigating bedrock generated message", message);
-    
+
     // send appropriate notifications
     const sendEmailCommandInput: SendEmailCommandInput = {
         Source: process.env.SOURCE_EMAIL,

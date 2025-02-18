@@ -9,7 +9,7 @@ export class AiLumniHubStack extends cdk.Stack {
     super(scope, id, props);
 
     // build processor dynamodb table
-    const processorTable = new cdk.aws_dynamodb.Table(this, 'webhook-event-processor-table', {
+    const processorTable = new cdk.aws_dynamodb.Table(this, 'sports-schedule-data-table', {
       partitionKey: {
         name: "sport",
         type: cdk.aws_dynamodb.AttributeType.STRING
@@ -25,7 +25,7 @@ export class AiLumniHubStack extends cdk.Stack {
     })
 
     // build config dynamodb table
-    const configTable = new cdk.aws_dynamodb.Table(this, 'webhook-event-processor-table', {
+    const configTable = new cdk.aws_dynamodb.Table(this, 'sports-schedule-config-table', {
       partitionKey: {
         name: "SchoolSport",
         type: cdk.aws_dynamodb.AttributeType.STRING
@@ -106,7 +106,7 @@ export class AiLumniHubStack extends cdk.Stack {
     })
     webhookEventProcessor.grantInvoke(apigInvokeRole)
     processorTable.grantReadWriteData(webhookEventProcessor)
-    
+
     // define enventbridge rule assigned to notification lambda
     const notificationCronJob = new cdk.aws_events.Rule(this, 'trigger-bedrock-job-daily', {
       schedule: cdk.aws_events.Schedule.expression('cron(0 12 ? * * *)')

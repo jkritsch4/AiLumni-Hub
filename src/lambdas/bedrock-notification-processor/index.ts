@@ -31,15 +31,16 @@ export async function handler(event: any) {
         throw new Error(`record with game id ${gameId} not found`)
     }
 
-    const bedrockPrompt = `Generate a push notification that summarizes this event: ${getItemResponse.Item}`;
+    const bedrockPrompt = `Human: Generate a push notification that summarizes this event: ${getItemResponse.Item}\nAssistant:`;
     // train bedrock client on data
     const invokeModelCommand = new InvokeModelCommand({
-        modelId: 'athropic.claude-v2',
+        modelId: 'anthropic.claude-v2',
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
-            prompt: JSON.stringify(bedrockPrompt),
-            max_tokens: 100
+            prompt: bedrockPrompt,
+            max_tokens_to_sample: 100,
+            temperature: 0.7
         })
     });
 

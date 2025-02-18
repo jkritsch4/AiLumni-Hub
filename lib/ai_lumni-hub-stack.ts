@@ -79,6 +79,15 @@ export class AiLumniHubStack extends cdk.Stack {
     webhookEventProcessor.grantInvoke(apigInvokeRole)
     processorTable.grantReadWriteData(webhookEventProcessor)
 
+    const rssFeedParser = new cdk.aws_lambda.Function(this, 'rss-feed-processor-lambda', {
+      runtime: cdk.aws_lambda.Runtime.PYTHON_3_13,
+      code: cdk.aws_lambda.Code.fromAsset(path.join(__dirname, '../src/lambdas/rss-feed-parser', 'index.py')),
+      timeout: cdk.Duration.seconds(60),
+      environment: lambdaEnvironment,
+      memorySize: 128,
+      handler: 'index.py'
+    })
+
     // define enventbridge rule assigned to notification lambda
     const notificationCronJob = new cdk.aws_events.Rule(this, 'trigger-bedrock-job-daily', {
       schedule: cdk.aws_events.Schedule.expression('cron(0 12 ? * * *)')
@@ -91,7 +100,7 @@ export class AiLumniHubStack extends cdk.Stack {
     // attach lambda to API
     processorApi.root.addMethod(
       "POST",
-      new cdk.aws_apigateway.LambdaIntegration(webhookEventProcessor)
+      new cdk.aws_apigateway.LambdaIntegration(rssFeedParser)
     )
   }
 }

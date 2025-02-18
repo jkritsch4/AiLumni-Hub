@@ -45,6 +45,5 @@ export async function handler() {
     };
     const sendEmailCommand = new SendEmailCommand(sendEmailCommandInput);
     const sesResponse = await sesClient.send(sendEmailCommand);
-    console.log("investigating sesResponse, sesResponse");
-    return
+    console.log("investigating sesResponse", sesResponse)
 }

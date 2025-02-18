@@ -31,7 +31,7 @@ export async function handler(event: any) {
         throw new Error(`record with game id ${gameId} not found`)
     }
 
-    const bedrockPrompt = `Human: Generate a push notification that summarizes this event: ${getItemResponse.Item}\nAssistant:`;
+    const bedrockPrompt = `Human: Generate a push notification with the title, description, link, and result this event: ${getItemResponse.Item}\nAssistant:`;
     // train bedrock client on data
     const invokeModelCommand = new InvokeModelCommand({
         modelId: 'anthropic.claude-v2',

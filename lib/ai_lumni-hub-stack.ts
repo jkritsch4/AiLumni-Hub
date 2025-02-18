@@ -8,20 +8,36 @@ export class AiLumniHubStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // build dynamodb table
+    // build processor dynamodb table
     const processorTable = new cdk.aws_dynamodb.Table(this, 'webhook-event-processor-table', {
       partitionKey: {
-        name: "Team",
+        name: "sport",
         type: cdk.aws_dynamodb.AttributeType.STRING
       },
       sortKey: {
-        name: "Sport",
+        name: "gameDateTime",
         type: cdk.aws_dynamodb.AttributeType.STRING
       },
       tableClass: cdk.aws_dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
       pointInTimeRecovery: true,
       encryption: cdk.aws_dynamodb.TableEncryption.AWS_MANAGED,
-      tableName: 'webhook-event-processor-table'
+      tableName: 'sports-schedule-data'
+    })
+
+    // build config dynamodb table
+    const configTable = new cdk.aws_dynamodb.Table(this, 'webhook-event-processor-table', {
+      partitionKey: {
+        name: "SchoolSport",
+        type: cdk.aws_dynamodb.AttributeType.STRING
+      },
+      sortKey: {
+        name: "RSSFeedURL",
+        type: cdk.aws_dynamodb.AttributeType.STRING
+      },
+      tableClass: cdk.aws_dynamodb.TableClass.STANDARD_INFREQUENT_ACCESS,
+      pointInTimeRecovery: true,
+      encryption: cdk.aws_dynamodb.TableEncryption.AWS_MANAGED,
+      tableName: 'sports-schedule-config'
     })
 
     // build webhook api
@@ -46,6 +62,7 @@ export class AiLumniHubStack extends cdk.Stack {
 
     const lambdaEnvironment = {
       PROCESSOR_TABLE_NAME: processorTable.tableName,
+      CONFIG_TABLE: configTable.tableName,
       SOURCE_EMAIL: 'cade11kritsch@yahoo.com',
       DESTINATION_EMAIL: 'cade11kritsch@yahoo.com',
       EMAIL_SUBJECT: 'testing',
@@ -87,7 +104,9 @@ export class AiLumniHubStack extends cdk.Stack {
       memorySize: 128,
       handler: 'index.py'
     })
-
+    webhookEventProcessor.grantInvoke(apigInvokeRole)
+    processorTable.grantReadWriteData(webhookEventProcessor)
+    
     // define enventbridge rule assigned to notification lambda
     const notificationCronJob = new cdk.aws_events.Rule(this, 'trigger-bedrock-job-daily', {
       schedule: cdk.aws_events.Schedule.expression('cron(0 12 ? * * *)')

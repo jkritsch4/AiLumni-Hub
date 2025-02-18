@@ -1,10 +1,16 @@
-import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { DynamoDBClient, GetItemCommandInput, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { SendEmailCommand, SendEmailCommandInput, SESClient } from '@aws-sdk/client-ses';
 
-export async function handler() {
+export async function handler(event: any) {
+
+    const gameId = event?.gameID;
+
+    if (!gameId) {
+        throw new Error('Fatal error, no game id provided in input event');
+    }
     // initialize sdk clients
-    const bedrockClient = new BedrockClient({ region: this.region });
+    const bedrockClient = new BedrockRuntimeClient({ region: this.region });
     const dynamoClient = new DynamoDBClient({ region: this.region });
     const sesClient = new SESClient();
 
@@ -12,8 +18,8 @@ export async function handler() {
     const getItemCommandInput: GetItemCommandInput = {
         TableName: process.env.PROCESSOR_TABLE_NAME,
         Key: {
-            Team: {
-                "S": "Chico State"
+            GameID: {
+                "S": gameId
             }
         }
     }
@@ -21,11 +27,29 @@ export async function handler() {
     const getItemResponse = await dynamoClient.send(getItemCommand);
     console.log("investigating getItemResponse", getItemResponse);
 
+    if (!getItemResponse.Item) {
+        throw new Error(`record with game id ${gameId} not found`)
+    }
+
+    const bedrockPrompt = 'Generate a push notification that summarizes this event';
     // train bedrock client on data
-    const listFoundationModelsCommand = new ListFoundationModelsCommand({});
-    const bedrockResponse = await bedrockClient.send(listFoundationModelsCommand);
+    const invokeModelCommand = new InvokeModelCommand({
+        modelId: 'athropic.claude-v2',
+        contentType: 'application/json',
+        accept: 'application/json',
+        body: JSON.stringify({
+            prompt: bedrockPrompt,
+            max_tokens: 100
+        })
+    });
+    const bedrockResponse = await bedrockClient.send(invokeModelCommand);
     console.log("investigating bedrockResponse", bedrockResponse);
 
+    // parse response from bedrock
+    const bedrockResponseBody = JSON.parse(new TextDecoder().decode(bedrockResponse.body));
+    const message = bedrockResponseBody.completion.trim();
+    console.log("investigating bedrock generated message", message);
+    
     // send appropriate notifications
     const sendEmailCommandInput: SendEmailCommandInput = {
         Source: process.env.SOURCE_EMAIL,

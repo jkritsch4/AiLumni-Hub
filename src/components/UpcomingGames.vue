@@ -1,59 +1,50 @@
+<script setup>
+import { ref, onMounted } from 'vue';
+
+const upcomingGames = ref([]);
+const loading = ref(true);
+const error = ref(null);
+const apiUrl = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events'; // ✅ ACTUAL API URL - REPLACE IF DIFFERENT
+
+onMounted(async () => {
+  loading.value = true;
+  error.value = null;
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    upcomingGames.value = data.filter(item => item.dataType === 'gameResult'); // Filter for game results
+  } catch (err) {
+    error.value = err;
+    console.error("Error fetching upcoming games:", err);
+  } finally {
+    loading.value = false;
+  }
+});
+
+function formatDate(utcString) {
+  const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
+  return new Date(utcString).toLocaleDateString('en-US', options);
+}
+
+</script>
+
 <template>
   <div>
     <h2>Upcoming Games</h2>
-    <ul v-if="upcomingGames.length > 0">
-      <li v-for="game in upcomingGames" :key="game.start_time_utc">
+    <div v-if="loading">Loading upcoming games...</div>
+    <div v-if="error">Error loading games: {{ error.message }}</div>
+    <ul v-if="!loading && !error && upcomingGames.length > 0">
+      <li v-for="game in upcomingGames" :key="game.id">
         {{ game.team_name }} vs {{ game.opponent_name }} -
         {{ formatDate(game.start_time_utc) }}
-        <span v-if="game.streaming_link">
-          <a :href="game.streaming_link" target="_blank" rel="noopener noreferrer">Watch Live</a>
-        </span>
       </li>
     </ul>
-    <p v-else>No upcoming games scheduled.</p>
+    <p v-if="!loading && !error && upcomingGames.length === 0">No upcoming games found.</p>
   </div>
 </template>
-
-<script>
-import { ref, onMounted } from 'vue';
-import { API } from 'aws-amplify';
-
-export default {
-  setup() {
-    const upcomingGames = ref([]);
-    const loading = ref(true);
-    const error = ref(null);
-
-    onMounted(async () => {
-      try {
-        const gamesData = await API.get('SportsDataAPI', '/games/upcoming');
-        setUpcomingGames(gamesData);
-        loading.value = false;
-      } catch (err) {
-        error.value = err;
-        loading.value = false;
-        console.error("Error fetching upcoming games:", err);
-      }
-    });
-
-    function setUpcomingGames(data) {
-        upcomingGames.value = data;
-    }
-
-    const formatDate = (utcString) => {
-      const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' };
-      return new Date(utcString).toLocaleDateString('en-US', options);
-    };
-
-    return {
-      upcomingGames,
-      loading,
-      error,
-      formatDate
-    };
-  }
-};
-</script>
 
 <style scoped>
 /* Add component-specific styles here */
@@ -63,8 +54,5 @@ ul {
 }
 li {
   margin-bottom: 10px;
-}
-a {
-  margin-left: 10px;
 }
 </style>

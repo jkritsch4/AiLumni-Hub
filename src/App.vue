@@ -1,10 +1,26 @@
-<script setup lang="ts">
-import Todos from './components/Todos.vue'
-</script>
-
 <template>
-  <main>
-    <Todos />
-  </main>
+  <div id="app">
+    <Dashboard />
+  </div>
 </template>
 
+<script>
+import Dashboard from './components/Dashboard.vue';
+
+export default {
+  name: 'App',
+  components: {
+    Dashboard
+  }
+}
+</script>
+
+<style>
+/* Global styles if needed */
+#app {
+  font-family: Avenir, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3d4d;
+}
+</style>

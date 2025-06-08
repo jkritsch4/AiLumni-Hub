@@ -62,107 +62,103 @@ function formatDate(utcString) {
     <div v-if="loading">Loading recent results...</div>
     <div v-if="error">Error loading results: {{ error.message }}</div>
     <div v-if="!loading && !error && recentResults.length > 0" class="results-table-container">
-      <ul class="results-table">
-        <li class="table-header" :style="{ backgroundColor: primaryColor }">
-          <span class="column-opponent">Opponent</span>
-          <span class="column-date">Date</span>
-          <span class="column-location">Location</span>
-          <span class="column-result">Result</span>
-        </li>
-        <li v-for="result in recentResults" :key="result.id" class="table-row">
-          <span class="column-opponent">
-            <img v-if="result.opponent_logo_url" :src="result.opponent_logo_url" :alt="result.opponent_name + ' Logo'" class="school-logo" style="max-width: 50px; max-height: 50px; vertical-align: middle;">
-            <span v-else style="font-size: 0.9em;">{{ result.opponent_name }}</span>
-          </span>
-          <span class="column-date" style="font-size: 0.9em;">{{ formatDate(result.start_time_utc) }}</span>
-          <span class="column-location" style="font-size: 0.9em;">{{ result.game_location }}</span>
-          <span class="column-result" style="font-size: 0.9em;">{{ result.game_outcome }}</span>
-        </li>
-      </ul>
+      <table class="results-table">
+        <thead>
+          <tr :style="{ backgroundColor: primaryColor }">
+            <th>Opponent</th>
+            <th>Date</th>
+            <th>Location</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="result in recentResults" :key="result.id">
+            <td class="opponent-cell">
+              <img
+                :src="result.opponent_logo_url || '/images/default-logo.png'"
+                :alt="result.opponent_name + ' Logo'"
+                class="school-logo"
+                @error="event => event.target.src = '/images/default-logo.png'"
+              />
+              <span>{{ result.opponent_name }}</span>
+            </td>
+            <td>{{ formatDate(result.start_time_utc) }}</td>
+            <td>{{ result.game_location }}</td>
+            <td>{{ result.game_outcome }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
     <p v-if="!loading && !error && recentResults.length === 0">No recent results found for UCSD Baseball.</p>
   </div>
 </template>
 
 <style scoped>
-/*  Styling is mostly in Dashboard.vue */
 .recent-results-section {
   text-align: center;
   width: 100%;
   box-sizing: border-box;
 }
+
 .results-table-container {
   overflow-x: auto;
   width: 100%;
   box-sizing: border-box;
 }
+
 .results-table {
-  list-style: none;
-  padding: 0;
   width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 10px;
-  background-color: #2a2a2a;
-  border-radius: 5px;
-  font-size: 0.9em;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #222;
+  border-radius: 8px;
+  font-size: 1em;
   font-family: 'Arial', sans-serif;
-  box-sizing: border-box;
-  margin: 0 auto;
+  margin: 0 auto 10px auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.table-header, .table-row {
-  display: flex;
-  width: 100%;
-  box-sizing: border-box;
-}
-.table-header {
-  font-weight: bold;
-  color: white;
-  font-family: 'Arial', sans-serif;
-  box-sizing: border-box;
-}
-.table-row {
-  border-bottom: 1px solid #444;
-  background-color: #252525;
-  box-sizing: border-box;
-}
-.table-row:last-child {
-  border-bottom: none;
-}
-/*  DIRECT and SPECIFIC column styling for centering and wrapping */
-.column-opponent,
-.column-date,
-.column-location,
-.column-result {
-  padding: 6px 4px;
-  text-align: center;
-  box-sizing: border-box;
-  min-width: 80px;
-  word-wrap: break-word;
-  overflow-wrap: anywhere;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-}
-/* More compact column widths - REMOVE flex properties */
-.column-date {
-  min-width: 70px;
-  text-align: center;
-}
-.column-result {
-  min-width: 50px;
-  text-align: center;
-}
-.school-logo {
-  max-width: 100%;
-  max-height: 100%;
-  display: block;
-  margin: 0 auto;
+
+.results-table th, .results-table td {
+  padding: 12px 10px;
+  text-align: left;
+  color: #fff;
   vertical-align: middle;
 }
-/* Ensure text wrapping for Location column specifically */
-.column-location {
-  word-wrap: break-word;
-  overflow-wrap: anywhere;
+
+.results-table th {
+  font-weight: bold;
+  font-size: 1.1em;
+  letter-spacing: 1px;
+  border-bottom: 2px solid #333;
+}
+
+.results-table tr {
+  border-bottom: 1px solid #333;
+  transition: background 0.2s;
+}
+
+.results-table tr:last-child {
+  border-bottom: none;
+}
+
+.results-table tr:hover {
+  background: #292929;
+}
+
+.opponent-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.school-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  vertical-align: middle;
+  /* Remove background and border for transparency */
+  background: transparent;
+  border-radius: 4px;
+  border: none;
 }
 </style>

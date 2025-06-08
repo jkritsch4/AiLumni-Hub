@@ -65,7 +65,14 @@ User
       </button>
     </div>
     <div class="dashboard-title">
-      <img v-if="teamLogoUrl" :src="teamLogoUrl" alt="Team Logo" class="team-logo" style="width: 100px; height: auto; margin-top: 40px;" />
+      <img
+  v-if="teamLogoUrl"
+  :src="teamLogoUrl"
+  alt="Team Logo"
+  class="team-logo"
+  style="width: 100px; height: auto; margin-top: 40px;"
+  @error="event => event.target.src = '/images/default-logo.png'"
+/>
       <span v-else>UCSD</span>
       <h2 class="sport-name" style="font-size: 2.0em; font-family: 'Bebas Neue', sans-serif;">{{ selectedSport }}</h2>
     </div>
@@ -99,19 +106,16 @@ User
 </template>
 
 <style scoped>
-/* Import the sportier font - Bebas Neue */
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
 
 .dashboard {
-font-family: 'Bebas Neue', sans-serif;
-padding: 10px;
-overflow-y: auto;
-max-height: 100vh;
-background-image: url('/images/NewImage.png');
-background-repeat: no-repeat;
-background-size: cover;
-background-position: center;
-color: white;
+  font-family: 'Bebas Neue', sans-serif;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 100vh;
+  background: url('/images/AiLumniHub.jpg') no-repeat center center fixed;
+  background-size: cover;
+  color: white;
 }
 
 .dashboard-title {
@@ -209,6 +213,14 @@ color: white;
 
 .standings-section .standings-table > li > span:nth-child(1) {
   text-align: left;
+}
+
+.standings-section table,
+.standings-section th,
+.standings-section td {
+  font-family: 'Arial', sans-serif;
+  font-size: 1em;
+  color: #fff;
 }
 
 .tab-toggle {

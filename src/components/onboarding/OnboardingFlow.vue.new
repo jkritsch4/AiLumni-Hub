@@ -1,0 +1,171 @@
+<template>
+  <div class="onboarding-container" :class="{ 'fade-out': !isVisible }">
+    <div class="onboarding-card">
+      <div class="progress-bar">
+        <div 
+          class="progress-fill" 
+          :style="{ width: `${(currentStepIndex / (totalSteps - 1)) * 100}%` }"
+        ></div>
+      </div>
+      
+      <transition name="slide" mode="out-in">
+        <component 
+          :is="currentComponent"
+          :university-data="universityData"
+          @next-step="handleNextStep"
+          @previous-step="handlePreviousStep"
+        />
+      </transition>
+
+      <div class="progress-dots">
+        <span 
+          v-for="(step, index) in totalSteps" 
+          :key="index"
+          :class="['dot', { active: currentStepIndex === index }]"
+        ></span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { computed } from 'vue'
+import UniversityConfirmation from './UniversityConfirmation.vue'
+import SportSelection from './SportSelection.vue'
+import NotificationPreferences from './NotificationPreferences.vue'
+
+export default {
+  name: 'OnboardingFlow',
+  components: {
+    UniversityConfirmation,
+    SportSelection,
+    NotificationPreferences
+  },
+  props: {
+    isVisible: {
+      type: Boolean,
+      default: true
+    }
+  },
+  emits: ['complete'],
+  data() {
+    return {
+      currentStepIndex: 0,
+      steps: [
+        UniversityConfirmation,
+        SportSelection,
+        NotificationPreferences
+      ],
+      universityData: {
+        name: 'UCSD',
+        logo: '/images/default-logo.png',
+        id: 'ucsd'
+      }
+    }
+  },
+  computed: {
+    currentComponent() {
+      return this.steps[this.currentStepIndex]
+    },
+    totalSteps() {
+      return this.steps.length
+    }
+  },
+  methods: {
+    handleNextStep(data) {
+      if (data) {
+        Object.assign(this.universityData, data)
+      }
+      if (this.currentStepIndex < this.steps.length - 1) {
+        this.currentStepIndex++
+      } else {
+        this.$emit('complete', this.universityData)
+      }
+    },
+    handlePreviousStep() {
+      if (this.currentStepIndex > 0) {
+        this.currentStepIndex--
+      }
+    }
+  }
+}
+</script>
+
+<style scoped>
+.onboarding-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 43, 73, 0.95);
+  z-index: 1000;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.onboarding-container.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.onboarding-card {
+  max-width: 500px;
+  width: 90%;
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  margin-bottom: 2rem;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #182B49;
+  transition: width 0.3s ease-in-out;
+}
+
+.progress-dots {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  transition: background-color 0.3s ease;
+}
+
+.dot.active {
+  background: #182B49;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.slide-enter-from {
+  transform: translateX(30px);
+  opacity: 0;
+}
+
+.slide-leave-to {
+  transform: translateX(-30px);
+  opacity: 0;
+}
+</style>

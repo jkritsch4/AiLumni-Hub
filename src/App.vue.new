@@ -7,23 +7,17 @@
       <button @click="resetError" class="retry-button">Try Again</button>
     </div>
     
-    <!-- Loading State -->
-    <div v-else-if="isLoading" class="loading-state">
-      <div class="loading-spinner"></div>
-      <p>Loading UCSD Athletics...</p>
-    </div>
-    
     <!-- Main App Content -->
     <template v-else>
       <OnboardingFlow 
-        v-if="isOnboardingVisible" 
+        v-if="!isOnboardingComplete" 
         @onboarding-complete="completeOnboarding"
         :isVisible="true"
         :default-university="defaultUniversity"
       />
       <template v-else>
         <Dashboard 
-          v-if="onboardingComplete"
+          v-if="isOnboardingComplete"
           :team-data="teamData"
         />
         <FabNavigation 
@@ -42,19 +36,21 @@ import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import Dashboard from './components/Dashboard.vue'
 import { type TeamData, getTeamData, cacheTeamData, getCachedTeamData } from './services/api';
 
+interface UniversityData {
+  name: string;
+  logo: string;
+}
+
 // App state
-const isLoading = ref(true);
+const isOnboardingComplete = ref(false);
 const hasError = ref(false);
 const errorMessage = ref('');
-const isOnboardingVisible = ref(true);
-const onboardingComplete = ref(false);
-
 const teamData = ref<TeamData>({
   name: 'UCSD Baseball',
   logo_url: '/images/ucsd-trident.svg'
 });
 
-const defaultUniversity = {
+const defaultUniversity: UniversityData = {
   name: 'UCSD Baseball',
   logo: '/images/ucsd-trident.svg'
 };
@@ -64,13 +60,14 @@ const handleError = (error: Error) => {
   console.error('[App] Error caught:', error);
   hasError.value = true;
   errorMessage.value = error.message || 'An unknown error occurred';
-  isLoading.value = false;
 };
 
 const resetError = async () => {
   console.debug('[App] Resetting error state');
   hasError.value = false;
   errorMessage.value = '';
+  
+  // Retry initialization
   await initializeApp();
 };
 
@@ -78,28 +75,28 @@ const resetError = async () => {
 const initializeApp = async () => {
   console.debug('[App] Initializing app');
   try {
-    isLoading.value = true;
     const completed = localStorage.getItem('onboardingComplete');
-    console.debug('[App] Onboarding status:', completed);
-
     if (completed === 'true') {
-      onboardingComplete.value = true;
-      isOnboardingVisible.value = false;
+      console.debug('[App] Onboarding complete, loading team data');
+      isOnboardingComplete.value = true;
+      
       const cachedData = getCachedTeamData();
       if (cachedData) {
+        console.debug('[App] Using cached team data:', cachedData);
         teamData.value = cachedData;
       }
-      
+
       const freshData = await getTeamData();
       if (freshData) {
+        console.debug('[App] Updated with fresh team data:', freshData);
         teamData.value = freshData;
         cacheTeamData(freshData);
       }
+    } else {
+      console.debug('[App] Showing onboarding flow');
     }
   } catch (error) {
     handleError(error instanceof Error ? error : new Error('Failed to initialize app'));
-  } finally {
-    isLoading.value = false;
   }
 };
 
@@ -107,31 +104,21 @@ const initializeApp = async () => {
 const completeOnboarding = async (data: { sports: string[] }) => {
   console.debug('[App] Completing onboarding with data:', data);
   try {
-    isLoading.value = true;
     const newTeamData = await getTeamData(data.sports?.[0]);
     teamData.value = newTeamData;
-    onboardingComplete.value = true;
+    isOnboardingComplete.value = true;
     localStorage.setItem('onboardingComplete', 'true');
     cacheTeamData(newTeamData);
+    console.debug('[App] Onboarding completed successfully');
   } catch (error) {
     handleError(error instanceof Error ? error : new Error('Failed to complete onboarding'));
-  } finally {
-    isLoading.value = false;
   }
 };
 
 // Initialize app on mount
-onMounted(() => {
-  console.log('[App] Component mounted');
-  // Check if onboarding was previously completed
-  const completed = localStorage.getItem('onboardingComplete');
-  if (completed) {
-    console.log('[App] Onboarding previously completed');
-    onboardingComplete.value = true;
-    isOnboardingVisible.value = false;
-  } else {
-    console.log('[App] Starting onboarding flow');
-  }
+onMounted(async () => {
+  console.debug('[App] Component mounted');
+  await initializeApp();
 });
 </script>
 
@@ -152,44 +139,7 @@ onMounted(() => {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Loading state */
-.loading-state {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: #f8f9fa;
-  z-index: 1000;
-}
-
-.loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid var(--ucsd-blue);
-  border-top-color: var(--ucsd-gold);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 1rem;
-}
-
-.loading-state p {
-  color: var(--ucsd-blue);
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.5rem;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Error boundary */
+/* Error boundary styles */
 .error-boundary {
   position: fixed;
   top: 0;
@@ -203,7 +153,7 @@ onMounted(() => {
   background-color: #f8f9fa;
   padding: 2rem;
   text-align: center;
-  z-index: 1000;
+  z-index: 9999;
 }
 
 .error-boundary h2 {
@@ -235,7 +185,7 @@ onMounted(() => {
   background-color: #004b76;
 }
 
-/* Transitions */
+/* Transition animations */
 .slide-enter-active,
 .slide-leave-active {
   transition: all 0.3s ease;
@@ -251,6 +201,7 @@ onMounted(() => {
   transform: translateX(-30px);
 }
 
+/* Fade animations */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;

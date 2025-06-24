@@ -113,7 +113,7 @@ const formattedLocation = computed(() => {
         LOCATION: {{ formattedLocation }}
       </div>
       <div v-if="showingPastGame" class="past-indicator">
-        <span> Most recent game (New schedule pending)</span>
+        MOST RECENT GAME (NEW SCHEDULE PENDING)
       </div>
     </div>
   </div>
@@ -155,11 +155,15 @@ span {
 }
 .past-indicator {
   color: var(--ucsd-gold, #FFCD00);
-  font-size: 0.9em;
+  font-size: 1em;
   margin-top: 10px;
-  background-color: rgba(255, 205, 0, 0.1);
+  background-color: transparent;
   display: inline-block;
-  padding: 5px 15px;
-  border-radius: 4px;
+  padding: 10px 20px;
+  border-radius: 0;
+  font-weight: bold;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 425px;
 }
 </style>

@@ -1,14 +1,6 @@
 <template>
   <div class="app-shell">
     <div class="main-content-container">
-      <transition name="fade-slide" mode="out-in">
-        <component
-          :is="currentTabComponent"
-          :home-team-logo="logoUrl"
-          :university-name="universityName"
-          @team-logo-loaded="handleTeamLogoLoaded"
-        />
-      </transition>
       <div class="fab-container">
         <button class="fab-main" @click="toggleFab">
           <span v-if="!fabOpen">Menu</span>
@@ -33,6 +25,14 @@
           </button>
         </transition-group>
       </div>
+      <transition name="fade-slide" mode="out-in">
+        <component
+          :is="currentTabComponent"
+          :home-team-logo="logoUrl"
+          :university-name="universityName"
+          @team-logo-loaded="handleTeamLogoLoaded"
+        />
+      </transition>
     </div>
   </div>
 </template>
@@ -107,9 +107,9 @@ onMounted(() => {
 }
 
 .fab-container {
-  position: fixed;
-  top: 2rem; 
-  right: 2rem; /* Position at the top right corner of the screen */
+  position: absolute;
+  top: 1rem; 
+  right: 1rem;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -119,18 +119,18 @@ onMounted(() => {
 }
 
 .fab-main {
-  width: 75px;
-  height: 75px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background-color: var(--ucsd-blue, #00629b);
   color: white;
-  border: 3px solid var(--ucsd-gold, #ffcd00);
+  border: 2px solid var(--ucsd-gold, #ffcd00);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 1rem;
+  font-size: 0.9rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   transition: transform 0.3s ease, background-color 0.3s ease;
 }

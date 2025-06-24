@@ -83,7 +83,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
               }"
             />
             <h3 class="team-name">
-              UCSD Baseball
+              {{ userPreferences.selectedSport }}
             </h3>
           </div>
         </section>

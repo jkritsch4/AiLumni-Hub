@@ -13,7 +13,7 @@
           }
         }"
       />
-      <h2 class="sport-name">BASEBALL</h2>
+      <h2 class="sport-name">{{ selectedSport }}</h2>
     </div>
 
     <div class="content-sections">
@@ -51,6 +51,10 @@ defineProps({
   homeTeamLogo: {
     type: String,
     default: ''
+  },
+  selectedSport: {
+    type: String,
+    default: 'BASEBALL'
   }
 });
 </script>
@@ -148,22 +152,24 @@ defineProps({
   left: 50%;
   bottom: 0;
   transform: translateX(-50%);
-  width: 100px;
+  width: 80px;
   height: 3px;
   background-color: var(--ucsd-gold, #ffcd00);
 }
 
 .fundraising-card, 
 .preferences-card {
-  background-color: #282828;
+  background-color: rgba(24, 43, 73, 0.7);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  color: white;
+  overflow: hidden;
 }
 
 .progress-placeholder {
-  background-color: #333;
+  background-color: rgba(0, 0, 0, 0.2);
   border-radius: 6px;
   padding: 20px;
   text-align: center;
@@ -181,7 +187,7 @@ defineProps({
 .mock-progress-bar {
   width: 80%;
   height: 24px;
-  background-color: #444;
+  background-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   overflow: hidden;
   margin-top: 15px;
@@ -190,8 +196,14 @@ defineProps({
 .progress-fill {
   width: 65%;
   height: 100%;
-  background-color: #ffb300;
+  background-color: var(--ucsd-gold, #ffcd00);
   animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
 }
 
 .fundraising-info {

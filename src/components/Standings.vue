@@ -4,6 +4,7 @@ import { ref, onMounted, defineProps } from 'vue';
 const standings = ref();
 const loading = ref(true);
 const error = ref(null);
+const conferenceFilter = ref('');
 const apiUrl = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events';
 
 const props = defineProps({
@@ -38,15 +39,24 @@ onMounted(async () => {
     teamStandings = teamStandings.filter(team => team.sport === props.selectedSport);
     console.log("Standings after Sport Filter:", teamStandings);
     
-    // Find the team data for the current team to get the conference_name
-    const currentTeam = data.find(item => 
-      item.team_name === props.subscribedTeams[0] && 
+    // Find the team data for the current team to get the conference from standing_type
+    const currentTeamData = data.find(item => 
+      props.subscribedTeams.includes(item.team_name) && 
       item.sport === props.selectedSport
     );
     
-    const conferenceFilter = currentTeam?.conference_name || 'Big West Conference';
-    teamStandings = teamStandings.filter(team => team.conference_name === conferenceFilter);
-    console.log(`Standings after Conference Filter (${conferenceFilter}):`, teamStandings);
+    if (currentTeamData?.standing_type) {
+      conferenceFilter.value = currentTeamData.standing_type;
+      console.log(`Found conference name for ${currentTeamData.team_name}: ${conferenceFilter.value}`);
+    } else {
+      // If no standing_type found, try to get any conference from standings data
+      const anyConference = teamStandings.length > 0 ? teamStandings[0].standing_type : 'Big West Conference';
+      conferenceFilter.value = anyConference;
+      console.log(`Using default conference name: ${conferenceFilter.value}`);
+    }
+    
+    teamStandings = teamStandings.filter(team => team.standing_type === conferenceFilter.value);
+    console.log(`Standings after Conference Filter (${conferenceFilter.value}):`, teamStandings);
     if (teamStandings.length > 0) {
       teamStandings.sort((a, b) => {
         const winsA = parseInt(a.conf_wins);
@@ -110,8 +120,8 @@ function calculatePercentage(wins, losses) {
         </ul>
       </div>
     </transition>
-    <p v-if="!loading && !error && standings.length === 0">
-      No standings data found for {{ selectedSport }} in the Big West conference.
+    <p v-if="!loading && !error && standings.length === 0" class="no-data-message">
+      No standings data found for {{ props.selectedSport }} in the {{ conferenceFilter.value || 'division' }}.
     </p>
   </div>
 </template>
@@ -121,25 +131,33 @@ function calculatePercentage(wins, losses) {
   text-align: center;
   width: 100%;
   box-sizing: border-box;
+  padding: 1rem;
+  background-color: transparent;
+  border-radius: 8px;
+  color: white;
 }
 .standings-table-container {
   overflow-x: auto;
   width: 100%;
   box-sizing: border-box;
+  margin-top: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 .standings-table {
   list-style: none;
   padding: 0;
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 10px;
-  background-color: transparent;
-  border-radius: 5px;
+  background-color: rgba(24, 43, 73, 0.7);
+  color: white;
+  border-radius: 8px;
   font-size: 0.9em;
   font-family: 'Arial', sans-serif;
   box-sizing: border-box;
   margin: 0 auto;
   text-align: center;
+  overflow: hidden;
 }
 .table-header, .table-row {
   display: flex;
@@ -151,11 +169,12 @@ function calculatePercentage(wins, losses) {
   color: white;
   font-family: 'Arial', sans-serif;
   box-sizing: border-box;
+  background-color: #182B49;
 }
 .table-row {
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
-  background-color: #282828;
+  background-color: rgba(24, 43, 73, 0.7);
 }
 .table-row:last-child {
   border-bottom: none;
@@ -169,7 +188,7 @@ function calculatePercentage(wins, losses) {
 .column-home,
 .column-away,
 .column-neutral {
-  padding: 8px 6px;
+  padding: 12px;
   text-align: center;
   box-sizing: border-box;
   flex: 1;
@@ -212,8 +231,18 @@ function calculatePercentage(wins, losses) {
   margin-bottom: 10px;
 }
 .highlight-row {
-  background-color: rgba(255, 205, 0, 0.15); /* UCSD Gold with transparency */
+  background-color: rgba(255, 205, 0, 0.2); /* UCSD Gold with transparency */
   border-left: 3px solid var(--ucsd-gold, #FFCD00);
+  font-weight: 600;
+}
+.no-data-message {
+  color: white;
+  padding: 15px;
+  text-align: center;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin: 15px auto;
+  max-width: 80%;
 }
 @keyframes spin {
   0% { transform: rotate(0deg); }

@@ -113,7 +113,7 @@ const formattedLocation = computed(() => {
         LOCATION: {{ formattedLocation }}
       </div>
       <div v-if="showingPastGame" class="past-indicator">
-        <span>Recent Game (No upcoming games scheduled)</span>
+        <span> Most recent game (New schedule pending)</span>
       </div>
     </div>
   </div>

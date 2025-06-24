@@ -37,7 +37,7 @@ const sportsList = ref([
 ]);
 
 const ucsdBlue = '#182B49';
-const subscribedTeams = ref(['Baseball']);
+const subscribedTeams = ref(['UCSD Baseball']);
 const teamData = ref<any[]>([]);
 
 onMounted(async () => {
@@ -106,8 +106,6 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
         <section class="dashboard-section">
           <h2 class="section-title">Recent Results</h2>
           <RecentResults 
-            :recent-results="recentResultsData" 
-            :limit="5" 
             :subscribed-teams="subscribedTeams" 
             :primary-color="ucsdBlue" 
             style="width: 100%;"

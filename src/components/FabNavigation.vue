@@ -109,7 +109,7 @@ onMounted(() => {
 .fab-container {
   position: fixed;
   top: 2rem; 
-  right: 20%; /* Positioned more to the left to fit inside the app */
+  right: 2rem; /* Position at the top right corner of the screen */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -119,8 +119,8 @@ onMounted(() => {
 }
 
 .fab-main {
-  width: 80px;
-  height: 80px;
+  width: 75px;
+  height: 75px;
   border-radius: 50%;
   background-color: var(--ucsd-blue, #00629b);
   color: white;
@@ -130,6 +130,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-weight: bold;
+  font-size: 1rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   transition: transform 0.3s ease, background-color 0.3s ease;
 }

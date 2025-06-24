@@ -3,17 +3,24 @@ import { ref, reactive, onMounted } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
-import UserPreferences from './UserPreferences.vue';
 import SkeletonLoader from './ui/SkeletonLoader.vue';
-import OnboardingFlow from './onboarding/OnboardingFlow.vue';
 import { fetchTeamData } from '../services/api';
 
+// Props
+const props = defineProps({
+  homeTeamLogo: {
+    type: String,
+    default: ''
+  }
+});
+
 // State management
-const homeTeamLogo = ref('https://ucsdtritons.com/images/logos/site/site.png');
 const isLoading = ref(true);
 const upcomingGameData = ref({});
 const recentResultsData = ref();
 const standingsData = ref();
+// Use the trident logo as default
+const homeTeamLogo = ref(props.homeTeamLogo || '/images/ucsd-trident.svg');
 const userPreferences = reactive({
   selectedSport: 'Baseball',
   notificationPreferences: [],
@@ -29,118 +36,91 @@ const sportsList = ref([
   'Softball'
 ]);
 
-// Onboarding and loading states
-const isOnboarding = ref(true);
-const hasCompletedOnboarding = ref(false);
-
-const handleOnboardingComplete = (data) => {
-  // Update user preferences with onboarding data
-  userPreferences.selectedSport = data.sport;
-  userPreferences.notificationPreferences = data.notifications;
-  
-  // Mark onboarding as complete
-  isOnboarding.value = false;
-  hasCompletedOnboarding.value = true;
-  
-  // Save completion state to localStorage
-  localStorage.setItem('onboardingComplete', 'true');
-  localStorage.setItem('onboardingData', JSON.stringify(data));
-};
-
-onMounted(() => {
-  // Check if onboarding was previously completed
-  const completed = localStorage.getItem('onboardingComplete');
-  if (completed === 'true') {
-    isOnboarding.value = false;
-    hasCompletedOnboarding.value = true;
-    const savedData = localStorage.getItem('onboardingData');
-    if (savedData) {
-      const data = JSON.parse(savedData);
-      userPreferences.selectedSport = data.sport;
-      userPreferences.notificationPreferences = data.notifications;
-    }
-  }
-  
-  isLoading.value = false;
-});
-
 const ucsdBlue = '#182B49';
-const selectedSport = ref('Baseball');
-const activeTab = ref('standings');
-
-const teamData = ref([]);
+const subscribedTeams = ref(['Baseball']);
+const teamData = ref<any[]>([]);
 
 onMounted(async () => {
   try {
     const data = await fetchTeamData();
     teamData.value = data;
     console.log('[Dashboard] Loaded team data:', data);
+    isLoading.value = false;
   } catch (error) {
     console.error('[Dashboard] Error loading team data:', error);
+    isLoading.value = false;
   }
 });
+
+const emit = defineEmits(['team-logo-loaded']);
+
+const handleTeamLogoLoaded = (newLogoUrl: string) => {
+  console.log('[Dashboard] Team logo loaded:', newLogoUrl);
+  if (newLogoUrl) {
+    homeTeamLogo.value = newLogoUrl;
+    emit('team-logo-loaded', newLogoUrl);
+  }
+};
 </script>
 
 <template>
-  <div class="dashboard" :style="{ color: 'white' }">
-    <!-- Onboarding Overlay -->
-    <OnboardingFlow 
-      v-if="isOnboarding"
-      @complete="handleOnboardingComplete"
-      :is-visible="isOnboarding"
-    />
-
+  <div class="dashboard-container">
     <!-- Dashboard Content -->
-    <div v-show="!isOnboarding" :class="{ 'fade-in': !isOnboarding }">
-      <div class="dashboard-title">
-        <img
-          v-if="!isLoading"
-          :src="homeTeamLogo"
-          alt="Team Logo"
-          class="team-logo"
-          style="width: 100px; height: auto; margin-top: 40px;"
-          @error="event => event.target.src = '/images/default-logo.png'"
-        />
-      </div>
-      
+    <div class="dashboard fade-in">
       <div class="content-sections">
-        <div v-if="activeTab === 'standings'" class="top-sections">
-          <section class="top-section upcoming-game-section">
-            <h2 style="text-align: center; color: white; font-size: 1.3em; margin-bottom: 8px; font-family: 'Bebas Neue', sans-serif;">
-              Upcoming Game
-            </h2>
-            <template v-if="isLoading">
-              <SkeletonLoader :height="120" />
-            </template>
-            <template v-else>
-              <UpcomingGames 
-                :subscribed-teams="subscribedTeams" 
-                @team-logo-loaded="handleTeamLogoLoaded" 
-                :games="teamData"
-              />
-            </template>
-          </section>
-          <section class="top-section recent-results-section">
-            <h2 style="text-align: center; color: white; font-size: 1.3em; margin-bottom: 8px; font-family: 'Bebas Neue', sans-serif;">
-              Recent Results
-            </h2>
-            <RecentResults 
-              :recent-results="recentResultsData" 
-              :limit="5" 
-              :subscribed-teams="subscribedTeams" 
-              :primary-color="ucsdBlue" 
-              style="width: 100%;"
+        <!-- Logo with sport underneath -->
+        <section class="dashboard-section">
+          <div class="logo-container">
+            <img
+              :src="homeTeamLogo"
+              alt="Team Logo"
+              class="team-logo"
+              @error="(event: Event) => { 
+                const target = event.target as HTMLImageElement;
+                if (target) {
+                  target.src = '/images/default-logo.png';
+                }
+              }"
             />
-          </section>
-        </div>
-        <section v-if="activeTab === 'standings'" class="standings-section">
-          <h2 style="text-align: center; color: white; font-size: 1.3em; margin-bottom: 8px; font-family: 'Bebas Neue', sans-serif;">
-            Standings
-          </h2>
-          <Standings 
-            :standings="standingsData" 
+            <h3 class="team-name">
+              UCSD Baseball
+            </h3>
+          </div>
+        </section>
+
+        <!-- Upcoming Game Section -->
+        <section class="dashboard-section">
+          <h2 class="section-title">Upcoming Game</h2>
+          <template v-if="isLoading">
+            <SkeletonLoader :height="120" />
+          </template>
+          <template v-else>
+            <UpcomingGames 
+              :subscribed-teams="subscribedTeams" 
+              @team-logo-loaded="handleTeamLogoLoaded" 
+            />
+          </template>
+        </section>
+
+        <!-- Recent Results Section -->
+        <section class="dashboard-section">
+          <h2 class="section-title">Recent Results</h2>
+          <RecentResults 
+            :recent-results="recentResultsData" 
+            :limit="5" 
+            :subscribed-teams="subscribedTeams" 
             :primary-color="ucsdBlue" 
-            :teams="teamData"
+            style="width: 100%;"
+          />
+        </section>
+
+        <!-- Standings Section -->
+        <section class="dashboard-section">
+          <h2 class="section-title">Standings</h2>
+          <Standings 
+            :primary-color="ucsdBlue" 
+            :subscribed-teams="subscribedTeams"
+            :selected-sport="userPreferences.selectedSport"
           />
         </section>
       </div>
@@ -149,18 +129,29 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.dashboard-container {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
 .dashboard {
-  min-height: 100vh;
+  height: 100vh;
   background-image: url('/images/AiLumniHub.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   position: relative;
+  overflow-y: auto;
+  padding: 1rem;
+  padding-bottom: 5rem;
+  box-sizing: border-box;
 }
 
 .dashboard::before {
   content: '';
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
@@ -243,6 +234,43 @@ onMounted(async () => {
   margin-bottom: 6px;
 }
 
+.dashboard-section {
+  margin-bottom: 3rem;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.2);
+  padding-bottom: 2rem;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.dashboard-section:last-child {
+  border-bottom: none;
+  margin-bottom: 4rem;
+}
+
+.section-title {
+  text-align: center;
+  color: white;
+  font-size: 2em;
+  margin-bottom: 1.5rem;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 3px;
+  background-color: var(--ucsd-gold, #ffcd00);
+}
+
 @media (max-width: 480px) {
   .sport-name {
     font-size: 1.6em;
@@ -313,5 +341,21 @@ onMounted(async () => {
   0% { opacity: 0.6; }
   50% { opacity: 0.8; }
   100% { opacity: 0.6; }
+}
+
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.team-name {
+  text-align: center;
+  color: white;
+  font-size: 1.5em;
+  font-family: 'Bebas Neue', sans-serif;
+  margin-top: 10px;
 }
 </style>

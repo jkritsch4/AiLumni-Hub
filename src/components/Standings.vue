@@ -23,6 +23,7 @@ const props = defineProps({
 });
 
 onMounted(async () => {
+  console.log("Selected Sport Prop in Standings:", props.selectedSport);
   loading.value = true;
   error.value = null;
   try {
@@ -36,8 +37,16 @@ onMounted(async () => {
     console.log("Filtered Standings Data (dataType=standings):", teamStandings);
     teamStandings = teamStandings.filter(team => team.sport === props.selectedSport);
     console.log("Standings after Sport Filter:", teamStandings);
-    teamStandings = teamStandings.filter(team => team.standing_type === 'Big West Conference');
-    console.log("Standings after Conference Filter (Big West):", teamStandings);
+    
+    // Find the team data for the current team to get the conference_name
+    const currentTeam = data.find(item => 
+      item.team_name === props.subscribedTeams[0] && 
+      item.sport === props.selectedSport
+    );
+    
+    const conferenceFilter = currentTeam?.conference_name || 'Big West Conference';
+    teamStandings = teamStandings.filter(team => team.conference_name === conferenceFilter);
+    console.log(`Standings after Conference Filter (${conferenceFilter}):`, teamStandings);
     if (teamStandings.length > 0) {
       teamStandings.sort((a, b) => {
         const winsA = parseInt(a.conf_wins);
@@ -60,9 +69,6 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
-  onMounted(async () => {
-    console.log("Selected Sport Prop in Standings:", props.selectedSport);
-  });
 });
 
 function calculatePercentage(wins, losses) {
@@ -90,7 +96,10 @@ function calculatePercentage(wins, losses) {
             <span class="column-overall-pct">Overall PCT</span>
             <span class="column-streak">Streak</span>
           </li>
-          <li v-for="team in standings" :key="team.team_name" class="table-row">
+          <li v-for="team in standings" 
+            :key="team.team_name" 
+            class="table-row"
+            :class="{ 'highlight-row': props.subscribedTeams.includes(team.team_name) }">
             <span class="column-school">{{ team.team_name }}</span>
             <span class="column-conf-record">{{ team.conf_wins }}-{{ team.conf_losses }}</span>
             <span class="column-conf-pct">{{ calculatePercentage(parseInt(team.conf_wins), parseInt(team.conf_losses)) }}</span>
@@ -201,6 +210,10 @@ function calculatePercentage(wins, losses) {
   height: 40px;
   animation: spin 1s linear infinite;
   margin-bottom: 10px;
+}
+.highlight-row {
+  background-color: rgba(255, 205, 0, 0.15); /* UCSD Gold with transparency */
+  border-left: 3px solid var(--ucsd-gold, #FFCD00);
 }
 @keyframes spin {
   0% { transform: rotate(0deg); }

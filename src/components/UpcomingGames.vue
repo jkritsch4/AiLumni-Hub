@@ -32,8 +32,9 @@ const fetchUpcomingGame = async () => {
     const data = await response.json();
 
     // Filter for games involving the subscribed teams
+    const teamName = props.subscribedTeams[0] || 'UCSD Baseball';
     const games = data.filter(game =>
-      props.subscribedTeams.includes(game.team_name) || props.subscribedTeams.includes(game.opponent_name)
+      game.team_name === teamName
     );
 
     const now = new Date();
@@ -112,7 +113,7 @@ const formattedLocation = computed(() => {
         LOCATION: {{ formattedLocation }}
       </div>
       <div v-if="showingPastGame" class="past-indicator">
-        <em>This is the most recent past game.</em>
+        <span>Recent Game (No upcoming games scheduled)</span>
       </div>
     </div>
   </div>
@@ -153,9 +154,12 @@ span {
   color: #aaa;
 }
 .past-indicator {
-  color: #ffb300;
-  font-size: 1em;
-  margin-top: 8px;
-  font-style: italic;
+  color: var(--ucsd-gold, #FFCD00);
+  font-size: 0.9em;
+  margin-top: 10px;
+  background-color: rgba(255, 205, 0, 0.1);
+  display: inline-block;
+  padding: 5px 15px;
+  border-radius: 4px;
 }
 </style>

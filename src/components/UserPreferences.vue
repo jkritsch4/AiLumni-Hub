@@ -2,12 +2,16 @@
   <div class="dashboard">
     <div class="dashboard-title">
       <img
-        v-if="homeTeamLogo"
-        :src="homeTeamLogo"
+        :src="homeTeamLogo || '/images/ucsd-trident.svg'"
         alt="Team Logo"
         class="team-logo"
         style="width: 100px; height: auto; margin-top: 40px;"
-        @error="event => event.target.src = '/images/default-logo.png'"
+        @error="(event: Event) => { 
+          const target = event.target as HTMLImageElement;
+          if (target) {
+            target.src = '/images/default-logo.png';
+          }
+        }"
       />
       <h2 class="sport-name">BASEBALL</h2>
     </div>
@@ -42,7 +46,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 defineProps({
   homeTeamLogo: {
     type: String,
@@ -55,11 +59,32 @@ defineProps({
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
 
 .dashboard {
-  font-family: 'Bebas Neue', sans-serif;
-  padding: 10px;
+  height: 100vh;
+  background-image: url('/images/AiLumniHub.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
   overflow-y: auto;
-  max-height: 100vh;
-  color: white;
+  padding: 1rem;
+  padding-bottom: 5rem;
+  box-sizing: border-box;
+}
+
+.dashboard::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(24, 43, 73, 0.85); /* UCSD Blue with opacity */
+  z-index: 0;
+}
+
+.dashboard > div, .content-sections {
+  position: relative;
+  z-index: 1;
 }
 
 .dashboard-title {
@@ -90,16 +115,42 @@ defineProps({
 }
 
 .content-sections {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
+}
+
+.fundraising-section, .preferences-section {
+  margin-bottom: 3rem;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.2);
+  padding-bottom: 2rem;
+}
+
+.preferences-section:last-child {
+  border-bottom: none;
+  margin-bottom: 4rem;
 }
 
 .section-title {
   text-align: center;
   color: white;
-  font-size: 1.3em;
-  margin-bottom: 8px;
+  font-size: 2em;
+  margin-bottom: 1.5rem;
   font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 3px;
+  background-color: var(--ucsd-gold, #ffcd00);
 }
 
 .fundraising-card, 

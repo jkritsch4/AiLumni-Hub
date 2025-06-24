@@ -4,7 +4,7 @@
       <transition name="fade-slide" mode="out-in">
         <component
           :is="currentTabComponent"
-          :home-team-logo="teamLogoUrl"
+          :home-team-logo="logoUrl"
           :university-name="universityName"
           @team-logo-loaded="handleTeamLogoLoaded"
         />
@@ -43,11 +43,11 @@ import Dashboard from './Dashboard.vue';
 import UserPreferences from './UserPreferences.vue';
 
 const props = defineProps({
-  initialLogo: {
+  teamLogoUrl: {
     type: String,
     default: '/images/ucsd-trident.svg',
   },
-  universityName: {
+  teamName: {
     type: String,
     default: 'UCSD Baseball',
   },
@@ -55,7 +55,8 @@ const props = defineProps({
 
 const currentTab = ref('schedule');
 const fabOpen = ref(false);
-const teamLogoUrl = ref(props.initialLogo);
+const logoUrl = ref(props.teamLogoUrl);
+const universityName = ref(props.teamName);
 
 const currentTabComponent = computed(() => {
   switch (currentTab.value) {
@@ -79,7 +80,7 @@ const selectTab = (tab) => {
 
 const handleTeamLogoLoaded = (newLogoUrl) => {
   if (newLogoUrl) {
-    teamLogoUrl.value = newLogoUrl;
+    logoUrl.value = newLogoUrl;
   }
 };
 
@@ -99,32 +100,37 @@ onMounted(() => {
   position: relative;
   height: 100vh;
   overflow-y: auto;
+  padding: 0 1rem;
+  box-sizing: border-box;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .fab-container {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  top: 2rem; 
+  right: 20%; /* Positioned more to the left to fit inside the app */
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: flex-end;
   gap: 1rem;
   z-index: 1000;
+  max-width: 90%; /* Ensure it's within viewport */
 }
 
 .fab-main {
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   background-color: var(--ucsd-blue, #00629b);
   color: white;
-  border: none;
+  border: 3px solid var(--ucsd-gold, #ffcd00);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   transition: transform 0.3s ease, background-color 0.3s ease;
 }
 

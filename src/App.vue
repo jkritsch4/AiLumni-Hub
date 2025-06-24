@@ -19,16 +19,12 @@
         v-if="isOnboardingVisible" 
         @onboarding-complete="completeOnboarding"
         :isVisible="true"
-        :default-university="defaultUniversity"
+        :default-university="{ name: defaultUniversity.team_name, logo: defaultUniversity.team_logo_url }"
       />
       <template v-else>
-        <Dashboard 
-          v-if="onboardingComplete"
-          :team-data="teamData"
-        />
         <FabNavigation 
-          :team-logo-url="teamData.logo_url"
-          :team-name="teamData.name"
+          :teamLogoUrl="teamData.team_logo_url"
+          :teamName="teamData.team_name"
         />
       </template>
     </template>
@@ -50,13 +46,13 @@ const isOnboardingVisible = ref(true);
 const onboardingComplete = ref(false);
 
 const teamData = ref<TeamData>({
-  name: 'UCSD Baseball',
-  logo_url: '/images/ucsd-trident.svg'
+  team_name: 'UCSD Baseball',
+  team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
 });
 
 const defaultUniversity = {
-  name: 'UCSD Baseball',
-  logo: '/images/ucsd-trident.svg'
+  team_name: 'UCSD Baseball',
+  team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
 };
 
 // Error handling
@@ -74,6 +70,23 @@ const resetError = async () => {
   await initializeApp();
 };
 
+// Fetch the API data, extract the correct team_logo_url for UCSD Baseball, and set it as the logo_url in teamData. Use this value throughout the app.
+const fetchAndSetTeamLogo = async () => {
+  try {
+    const response = await fetch('https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events');
+    const data = await response.json();
+    // Find the first entry for UCSD Baseball
+    const ucsd = data.find((item: any) => item.team_name === 'UCSD Baseball');
+    if (ucsd && ucsd.team_logo_url) {
+      teamData.value.team_logo_url = ucsd.team_logo_url;
+    } else {
+      teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';
+    }
+  } catch (e) {
+    teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';
+  }
+};
+
 // App initialization
 const initializeApp = async () => {
   console.debug('[App] Initializing app');
@@ -83,18 +96,36 @@ const initializeApp = async () => {
     console.debug('[App] Onboarding status:', completed);
 
     if (completed === 'true') {
+      console.debug('[App] Onboarding previously completed');
       onboardingComplete.value = true;
       isOnboardingVisible.value = false;
-      const cachedData = getCachedTeamData();
-      if (cachedData) {
-        teamData.value = cachedData;
+      try {
+        const cachedData = getCachedTeamData();
+        if (cachedData) {
+          console.debug('[App] Using cached team data:', cachedData);
+          teamData.value = cachedData;
+        }
+        await fetchAndSetTeamLogo();
+        console.debug('[App] Fetching fresh team data');
+        const freshData = await getTeamData();
+        if (freshData) {
+          console.debug('[App] Updated with fresh team data:', freshData);
+          teamData.value = freshData;
+          await fetchAndSetTeamLogo();
+          cacheTeamData(freshData);
+        }
+      } catch (dataError) {
+        console.error('[App] Error fetching team data:', dataError);
+        // Don't show error UI, just use default data
+        teamData.value = {
+          team_name: 'UCSD Baseball',
+          team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
+        };
       }
-      
-      const freshData = await getTeamData();
-      if (freshData) {
-        teamData.value = freshData;
-        cacheTeamData(freshData);
-      }
+    } else {
+      console.debug('[App] Showing onboarding flow');
+      onboardingComplete.value = false;
+      isOnboardingVisible.value = true;
     }
   } catch (error) {
     handleError(error instanceof Error ? error : new Error('Failed to initialize app'));
@@ -110,6 +141,7 @@ const completeOnboarding = async (data: { sports: string[] }) => {
     isLoading.value = true;
     const newTeamData = await getTeamData(data.sports?.[0]);
     teamData.value = newTeamData;
+    await fetchAndSetTeamLogo();
     onboardingComplete.value = true;
     localStorage.setItem('onboardingComplete', 'true');
     cacheTeamData(newTeamData);
@@ -121,17 +153,9 @@ const completeOnboarding = async (data: { sports: string[] }) => {
 };
 
 // Initialize app on mount
-onMounted(() => {
+onMounted(async () => {
   console.log('[App] Component mounted');
-  // Check if onboarding was previously completed
-  const completed = localStorage.getItem('onboardingComplete');
-  if (completed) {
-    console.log('[App] Onboarding previously completed');
-    onboardingComplete.value = true;
-    isOnboardingVisible.value = false;
-  } else {
-    console.log('[App] Starting onboarding flow');
-  }
+  await initializeApp();
 });
 </script>
 

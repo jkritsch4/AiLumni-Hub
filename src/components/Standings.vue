@@ -125,8 +125,12 @@ function isUserTeam(teamName) {
 
 <template>
   <div class="standings-section">
-    <div v-if="loading" class="loading-spinner">
-      <div class="spinner"></div>
+    <div v-if="loading" class="loading-container">
+      <div class="modern-loader">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
       <p>Loading standings...</p>
     </div>
     <div v-if="error">Error loading standings: {{ error.message }}</div>
@@ -256,23 +260,47 @@ function isUserTeam(teamName) {
 .fade-leave-from {
   opacity: 1;
 }
-.loading-spinner {
+.loading-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   color: white;
   font-family: 'Bebas Neue', sans-serif;
   font-size: 1.2em;
-  margin-top: 20px;
+  margin-top: 30px;
+  margin-bottom: 30px;
 }
-.spinner {
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid white;
+
+.modern-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  margin-bottom: 10px;
+  background-color: white;
+  opacity: 0.7;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot:nth-child(1) {
+  animation-delay: -0.32s;
+  background-color: var(--secondary-color, #FFCD00);
+}
+
+.dot:nth-child(2) {
+  animation-delay: -0.16s;
+  background-color: white;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0s;
+  background-color: var(--primary-color, #182B49);
 }
 .highlight-row {
   background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15); /* Secondary color with transparency */
@@ -294,8 +322,14 @@ function isUserTeam(teamName) {
   margin: 15px auto;
   max-width: 80%;
 }
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+@keyframes pulse {
+  0%, 80%, 100% { 
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
+  40% { 
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 </style>

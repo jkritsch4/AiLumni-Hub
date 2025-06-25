@@ -100,27 +100,102 @@ const formattedLocation = computed(() => {
 </script>
 
 <template>
-  <div class="upcoming-game" v-if="upcomingGame">
-    <div class="logos">
-      <img :src="upcomingGame.homeTeamLogo" alt="Home Team Logo" />
-      <span>VS.</span>
-      <img :src="upcomingGame.awayTeamLogo" alt="Away Team Logo" />
+  <div class="upcoming-games-section">
+    <div v-if="loading" class="loading-container">
+      <div class="modern-loader">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <p>Loading games...</p>
     </div>
-    <div class="game-info">
-      <div class="game-time">
-        TIME: {{ formattedTime }}
+    <div v-if="error" class="error-message">Error loading games: {{ error.message }}</div>
+    <div class="upcoming-game" v-if="!loading && !error && upcomingGame">
+      <div class="logos">
+        <img :src="upcomingGame.homeTeamLogo" alt="Home Team Logo" />
+        <span>VS.</span>
+        <img :src="upcomingGame.awayTeamLogo" alt="Away Team Logo" />
       </div>
-      <div class="game-location">
-        LOCATION: {{ formattedLocation }}
-      </div>
-      <div v-if="showingPastGame" class="past-indicator">
-        MOST RECENT GAME (NEW SCHEDULE PENDING)
+      <div class="game-info">
+        <div class="game-time">
+          TIME: {{ formattedTime }}
+        </div>
+        <div class="game-location">
+          LOCATION: {{ formattedLocation }}
+        </div>
+        <div v-if="showingPastGame" class="past-indicator">
+          MOST RECENT GAME (NEW SCHEDULE PENDING)
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.upcoming-games-section {
+  position: relative;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: white;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.2em;
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+
+.modern-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: white;
+  opacity: 0.7;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot:nth-child(1) {
+  animation-delay: -0.32s;
+  background-color: var(--secondary-color, #FFCD00);
+}
+
+.dot:nth-child(2) {
+  animation-delay: -0.16s;
+  background-color: white;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0s;
+  background-color: var(--primary-color, #182B49);
+}
+
+@keyframes pulse {
+  0%, 80%, 100% { 
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
+  40% { 
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+.error-message {
+  color: red;
+  text-align: center;
+  margin: 20px 0;
+}
+
 .upcoming-game {
   text-align: center;
   margin: 20px 0;

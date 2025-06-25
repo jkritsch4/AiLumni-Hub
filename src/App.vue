@@ -72,22 +72,26 @@ const resetError = async () => {
   await initializeApp();
 };
 
-// Fetch the API data, extract the correct team_logo_url for UCSD Baseball, and set it as the logo_url in teamData. Use this value throughout the app.
+// Fetch the API data, extract the correct team_logo_url and theme colors for the current team
 const fetchAndSetTeamLogo = async () => {
   try {
     const response = await fetch('https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events');
     const data = await response.json();
-    // Find the first entry for UCSD Baseball
-    const ucsd = data.find((item: any) => item.team_name === 'UCSD Baseball');
-    if (ucsd && ucsd.team_logo_url) {
-      teamData.value.team_logo_url = ucsd.team_logo_url;
+    // Find the first entry for the current team
+    const team = data.find((item: any) => item.team_name === teamData.value.team_name);
+    if (team && team.team_logo_url) {
+      teamData.value.team_logo_url = team.team_logo_url;
       
       // Load theme colors for the selected team
-      if (ucsd.primaryThemeColor && ucsd.secondaryThemeColor) {
-        loadTeamTheme(ucsd.team_name);
+      if (team.primaryThemeColor && team.secondaryThemeColor) {
+        console.log(`Loading theme colors for ${team.team_name}: Primary=${team.primaryThemeColor}, Secondary=${team.secondaryThemeColor}`);
+        loadTeamTheme(team.team_name);
+      } else {
+        console.log(`No theme colors found for ${team.team_name}, using defaults`);
       }
     } else {
-      teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';
+      // Fallback to default logo if team not found
+      teamData.value.team_logo_url = getTeamConfig(teamData.value.team_name).defaultLogo;
     }
   } catch (e) {
     teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';

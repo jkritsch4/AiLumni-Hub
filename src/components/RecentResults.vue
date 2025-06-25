@@ -1,6 +1,13 @@
 <template>
   <div class="recent-results-section">
-    <div v-if="loading">Loading recent results...</div>
+    <div v-if="loading" class="loading-container">
+      <div class="modern-loader">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <p>Loading results...</p>
+    </div>
     <div v-if="error">Error loading results: {{ error?.message }}</div>
     <div v-if="!loading && !error && recentResults.length > 0" class="results-table-container">
       <table class="results-table">
@@ -199,6 +206,60 @@ function formatDate(utcString: string): string {
   .school-logo {
     width: 24px;
     height: 24px;
+  }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: white;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.2em;
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+
+.modern-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: white;
+  opacity: 0.7;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.dot:nth-child(1) {
+  animation-delay: -0.32s;
+  background-color: var(--secondary-color, #FFCD00);
+}
+
+.dot:nth-child(2) {
+  animation-delay: -0.16s;
+  background-color: white;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0s;
+  background-color: var(--primary-color, #182B49);
+}
+
+@keyframes pulse {
+  0%, 80%, 100% { 
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
+  40% { 
+    transform: scale(1.2);
+    opacity: 1;
   }
 }
 </style>

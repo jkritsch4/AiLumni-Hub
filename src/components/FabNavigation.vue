@@ -41,6 +41,7 @@
 import { ref, computed, onMounted } from 'vue';
 import Dashboard from './Dashboard.vue';
 import UserPreferences from './UserPreferences.vue';
+import { themeColors } from '../services/theme';
 
 const props = defineProps({
   teamLogoUrl: {
@@ -107,9 +108,9 @@ onMounted(() => {
 }
 
 .fab-container {
-  position: absolute;
-  top: 1rem; 
-  right: 1rem;
+  position: fixed;
+  top: 1.5rem; 
+  right: 3.5rem; /* Further increased padding on the right */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -122,9 +123,9 @@ onMounted(() => {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background-color: var(--ucsd-blue, #00629b);
+  background-color: var(--primary-color, #182B49);
   color: white;
-  border: 2px solid var(--ucsd-gold, #ffcd00);
+  border: 2px solid var(--secondary-color, #ffcd00);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -137,7 +138,7 @@ onMounted(() => {
 
 .fab-main:hover {
   transform: scale(1.1);
-  background-color: var(--ucsd-gold, #ffcd00);
+  background-color: var(--secondary-color, #ffcd00);
   color: black;
 }
 
@@ -146,8 +147,8 @@ onMounted(() => {
   padding: 0.8rem 1.5rem;
   border-radius: 25px;
   background-color: white;
-  color: var(--ucsd-blue, #00629b);
-  border: 2px solid var(--ucsd-blue, #00629b);
+  color: var(--primary-color, #182B49);
+  border: 2px solid var(--primary-color, #182B49);
   cursor: pointer;
   font-weight: bold;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -156,8 +157,8 @@ onMounted(() => {
 
 .fab-option:hover,
 .fab-option.active {
-  background-color: var(--ucsd-gold, #ffcd00);
-  border-color: var(--ucsd-gold, #ffcd00);
+  background-color: var(--secondary-color, #ffcd00);
+  border-color: var(--secondary-color, #ffcd00);
   color: black;
   transform: scale(1.05);
 }

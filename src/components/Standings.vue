@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, defineProps } from 'vue';
+import { themeColors } from '../services/theme';
 
 const standings = ref();
 const loading = ref(true);
@@ -86,6 +87,40 @@ function calculatePercentage(wins, losses) {
   if (isNaN(totalGames) || totalGames === 0) return 'N/A';
   return (wins / totalGames).toFixed(3).substring(1);
 }
+
+// Helper function to match user's subscribed team with the standings data
+// This handles different naming formats between subscribed teams and standings data
+function isUserTeam(teamName) {
+  // Direct match - if the team name is exactly in the subscribedTeams array
+  if (props.subscribedTeams.includes(teamName)) {
+    return true;
+  }
+  
+  // Check for alternative formats of the same team name
+  for (const subscribedTeam of props.subscribedTeams) {
+    // Case 1: "UCSD Baseball" vs "UC San Diego"
+    if (subscribedTeam.includes('UCSD') && teamName.includes('UC San Diego')) {
+      return true;
+    }
+    
+    // Case 2: Check if the main part of the name matches (e.g., "UCLA" in "UCLA Basketball")
+    const subscribedMainName = subscribedTeam.split(' ')[0]; // Get first part of name
+    if (teamName.includes(subscribedMainName)) {
+      return true;
+    }
+    
+    // Case 3: Handle abbreviations vs full names
+    // Check if the team name contains any word from subscribedTeam
+    const subscribedWords = subscribedTeam.split(' ');
+    for (const word of subscribedWords) {
+      if (word.length > 2 && teamName.includes(word)) { // Only check words with 3+ chars
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
 </script>
 
 <template>
@@ -109,8 +144,10 @@ function calculatePercentage(wins, losses) {
           <li v-for="team in standings" 
             :key="team.team_name" 
             class="table-row"
-            :class="{ 'highlight-row': props.subscribedTeams.includes(team.team_name) }">
-            <span class="column-school">{{ team.team_name }}</span>
+            :class="{ 'highlight-row': isUserTeam(team.team_name) }">
+            <span class="column-school">
+              {{ team.team_name }}
+            </span>
             <span class="column-conf-record">{{ team.conf_wins }}-{{ team.conf_losses }}</span>
             <span class="column-conf-pct">{{ calculatePercentage(parseInt(team.conf_wins), parseInt(team.conf_losses)) }}</span>
             <span class="column-overall-record">{{ team.overall_wins }}-{{ team.overall_losses }}</span>
@@ -169,15 +206,22 @@ function calculatePercentage(wins, losses) {
   color: white;
   font-family: 'Arial', sans-serif;
   box-sizing: border-box;
-  background-color: #182B49;
+  background-color: var(--primary-color, #182B49);
 }
 .table-row {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
   background-color: rgba(24, 43, 73, 0.7);
+  transition: all 0.3s ease;
 }
 .table-row:last-child {
   border-bottom: none;
+}
+.table-row.highlight-row:hover {
+  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.25);
+  box-shadow: 
+    inset 0 0 16px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.5),
+    inset 0 0 8px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.9);
 }
 .column-school,
 .column-conf-record,
@@ -231,9 +275,15 @@ function calculatePercentage(wins, losses) {
   margin-bottom: 10px;
 }
 .highlight-row {
-  background-color: rgba(255, 205, 0, 0.2); /* UCSD Gold with transparency */
-  border-left: 3px solid var(--ucsd-gold, #FFCD00);
+  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15); /* Secondary color with transparency */
+  border-left: 6px solid var(--secondary-color, #FFCD00);
+  border-radius: 0 4px 4px 0;
   font-weight: 600;
+  position: relative;
+  box-shadow: 
+    inset 0 0 12px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.4),
+    inset 0 0 5px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.8);
+  transition: all 0.3s ease;
 }
 .no-data-message {
   color: white;

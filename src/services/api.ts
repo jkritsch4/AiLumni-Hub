@@ -5,6 +5,8 @@ export interface TeamData {
   game_date?: string;
   opponent_name?: string;
   sport?: string;
+  primaryThemeColor?: string;
+  secondaryThemeColor?: string;
 }
 
 const API_ENDPOINT = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events';
@@ -13,11 +15,15 @@ const API_ENDPOINT = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New
 const MOCK_TEAMS: Record<string, TeamData> = {
   'UCSD Baseball': {
     team_name: 'UCSD Baseball',
-    team_logo_url: '/images/ucsd-trident.svg'
+    team_logo_url: '/images/ucsd-trident.svg',
+    primaryThemeColor: '#182B49', // UCSD Blue
+    secondaryThemeColor: '#FFCD00' // UCSD Gold
   },
   'default': {
     team_name: 'UCSD Baseball',
-    team_logo_url: '/images/ucsd-trident.svg'
+    team_logo_url: '/images/ucsd-trident.svg',
+    primaryThemeColor: '#182B49',
+    secondaryThemeColor: '#FFCD00'
   }
 };
 
@@ -69,4 +75,54 @@ export const getCachedTeamData = (): TeamData | null => {
     console.warn('[API] Error reading cached team data:', error);
   }
   return null;
+};
+
+export const getTeamColors = async (teamName: string = 'UCSD Baseball'): Promise<{ primaryColor: string, secondaryColor: string }> => {
+  try {
+    const data = await fetchTeamData(teamName);
+    const team = data.find(item => item.team_name === teamName);
+    
+    // Return the team colors if they exist, otherwise return UCSD default colors
+    return {
+      primaryColor: team?.primaryThemeColor || '#182B49', // Default to UCSD Blue
+      secondaryColor: team?.secondaryThemeColor || '#FFCD00' // Default to UCSD Gold
+    };
+  } catch (error) {
+    console.error('Error getting team colors:', error);
+    return {
+      primaryColor: '#182B49', // Default to UCSD Blue
+      secondaryColor: '#FFCD00' // Default to UCSD Gold
+    };
+  }
+};
+
+// This is a helper to get both the team data and colors in one call
+export const getTeamDataWithColors = async (teamName: string = 'UCSD Baseball'): Promise<TeamData & { primaryColor: string, secondaryColor: string }> => {
+  const data = await getTeamData(teamName);
+  const colors = await getTeamColors(teamName);
+  
+  return {
+    ...data,
+    primaryColor: colors.primaryColor,
+    secondaryColor: colors.secondaryColor
+  };
+};
+
+// This allows getting the cached team colors from localStorage
+export const getCachedTeamColors = (): { primaryColor: string, secondaryColor: string } => {
+  try {
+    const cachedData = getCachedTeamData();
+    if (cachedData) {
+      return {
+        primaryColor: cachedData.primaryThemeColor || '#182B49',
+        secondaryColor: cachedData.secondaryThemeColor || '#FFCD00'
+      };
+    }
+  } catch (error) {
+    console.warn('[API] Error reading cached team colors:', error);
+  }
+  return {
+    primaryColor: '#182B49',
+    secondaryColor: '#FFCD00'
+  };
 };

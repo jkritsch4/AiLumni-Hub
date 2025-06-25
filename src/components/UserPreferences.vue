@@ -47,6 +47,8 @@
 </template>
 
 <script setup lang="ts">
+import { themeColors } from '../services/theme';
+
 defineProps({
   homeTeamLogo: {
     type: String,
@@ -82,7 +84,7 @@ defineProps({
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(24, 43, 73, 0.85); /* UCSD Blue with opacity */
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
   z-index: 0;
 }
 
@@ -154,7 +156,7 @@ defineProps({
   transform: translateX(-50%);
   width: 80px;
   height: 3px;
-  background-color: var(--ucsd-gold, #ffcd00);
+  background-color: var(--secondary-color, #ffcd00);
 }
 
 .fundraising-card, 
@@ -196,7 +198,7 @@ defineProps({
 .progress-fill {
   width: 65%;
   height: 100%;
-  background-color: var(--ucsd-gold, #ffcd00);
+  background-color: var(--secondary-color, #ffcd00);
   animation: pulse 2s infinite;
 }
 

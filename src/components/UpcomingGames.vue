@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, defineProps, defineEmits, computed } from 'vue';
+import { themeColors } from '../services/theme';
 
 const props = defineProps({
   subscribedTeams: {
@@ -154,7 +155,7 @@ span {
   color: #aaa;
 }
 .past-indicator {
-  color: var(--ucsd-gold, #FFCD00);
+  color: var(--secondary-color, #FFCD00);
   font-size: 1em;
   margin-top: 10px;
   background-color: transparent;

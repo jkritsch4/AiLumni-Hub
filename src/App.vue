@@ -36,7 +36,8 @@ import { ref, onMounted } from 'vue';
 import FabNavigation from './components/FabNavigation.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import Dashboard from './components/Dashboard.vue'
-import { type TeamData, getTeamData, cacheTeamData, getCachedTeamData } from './services/api';
+import { type TeamData, getTeamData, cacheTeamData, getCachedTeamData, getTeamColors } from './services/api';
+import { initializeTheme, loadTeamTheme } from './services/theme';
 
 // App state
 const isLoading = ref(true);
@@ -79,6 +80,11 @@ const fetchAndSetTeamLogo = async () => {
     const ucsd = data.find((item: any) => item.team_name === 'UCSD Baseball');
     if (ucsd && ucsd.team_logo_url) {
       teamData.value.team_logo_url = ucsd.team_logo_url;
+      
+      // Load theme colors for the selected team
+      if (ucsd.primaryThemeColor && ucsd.secondaryThemeColor) {
+        loadTeamTheme(ucsd.team_name);
+      }
     } else {
       teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';
     }
@@ -142,6 +148,10 @@ const completeOnboarding = async (data: { sports: string[] }) => {
     const newTeamData = await getTeamData(data.sports?.[0]);
     teamData.value = newTeamData;
     await fetchAndSetTeamLogo();
+    
+    // Load theme for the selected team
+    await loadTeamTheme(teamData.value.team_name);
+    
     onboardingComplete.value = true;
     localStorage.setItem('onboardingComplete', 'true');
     cacheTeamData(newTeamData);
@@ -155,6 +165,10 @@ const completeOnboarding = async (data: { sports: string[] }) => {
 // Initialize app on mount
 onMounted(async () => {
   console.log('[App] Component mounted');
+  
+  // Initialize theme from cached data before loading the app
+  initializeTheme();
+  
   await initializeApp();
 });
 </script>
@@ -165,6 +179,9 @@ onMounted(async () => {
 :root {
   --ucsd-blue: #00629B;
   --ucsd-gold: #FFCD00;
+  --primary-color: #182B49;
+  --secondary-color: #FFCD00;
+  --background-overlay: rgba(24, 43, 73, 0.85);
 }
 
 .app-container {

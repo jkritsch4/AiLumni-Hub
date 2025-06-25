@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
 import SkeletonLoader from './ui/SkeletonLoader.vue';
 import { fetchTeamData } from '../services/api';
+import { themeColors } from '../services/theme';
 
 // Props
 const props = defineProps({
@@ -36,8 +37,17 @@ const sportsList = ref([
   'Softball'
 ]);
 
-const ucsdBlue = '#182B49';
-const subscribedTeams = ref(['UCSD Baseball']);
+// Use dynamic team colors instead of hardcoded values
+const primaryColor = computed(() => themeColors.value.primaryColor);
+const secondaryColor = computed(() => themeColors.value.secondaryColor);
+
+// Get the current team name from props or local storage or default to UCSD Baseball
+const currentTeamName = ref('');
+const subscribedTeams = computed(() => {
+  const teamName = currentTeamName.value || 'UCSD Baseball';
+  // Return various formats of the team name to ensure matching in standings
+  return [teamName];
+});
 const teamData = ref<any[]>([]);
 
 onMounted(async () => {
@@ -45,6 +55,17 @@ onMounted(async () => {
     const data = await fetchTeamData();
     teamData.value = data;
     console.log('[Dashboard] Loaded team data:', data);
+    
+    // Get the current team name from local storage if available
+    const savedTeamData = localStorage.getItem('teamData');
+    if (savedTeamData) {
+      const parsedData = JSON.parse(savedTeamData);
+      currentTeamName.value = parsedData.team_name;
+      console.log('[Dashboard] Current team name:', currentTeamName.value);
+    } else {
+      currentTeamName.value = 'UCSD Baseball';
+    }
+    
     isLoading.value = false;
   } catch (error) {
     console.error('[Dashboard] Error loading team data:', error);
@@ -107,7 +128,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
           <h2 class="section-title">Recent Results</h2>
           <RecentResults 
             :subscribed-teams="subscribedTeams" 
-            :primary-color="ucsdBlue" 
+            :primary-color="primaryColor" 
             style="width: 100%;"
           />
         </section>
@@ -116,7 +137,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
         <section class="dashboard-section">
           <h2 class="section-title">Standings</h2>
           <Standings 
-            :primary-color="ucsdBlue" 
+            :primary-color="primaryColor" 
             :subscribed-teams="subscribedTeams"
             :selected-sport="userPreferences.selectedSport"
           />
@@ -154,7 +175,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(24, 43, 73, 0.85); /* UCSD Blue with opacity */
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
   z-index: 0;
 }
 
@@ -218,7 +239,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
   width: 100px;
   height: auto;
   margin-top: 40px;
-  filter: drop-shadow(0 0 10px rgba(255, 184, 28, 0.3));
+  filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.3));
 }
 
 .sport-name {
@@ -266,7 +287,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
   transform: translateX(-50%);
   width: 100px;
   height: 3px;
-  background-color: var(--ucsd-gold, #ffcd00);
+  background-color: var(--secondary-color, #ffcd00);
 }
 
 @media (max-width: 480px) {

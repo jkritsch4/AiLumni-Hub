@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, defineProps } from 'vue';
+import { themeColors } from '../services/theme';
 
 // Define types
 interface GameResult {
@@ -171,7 +172,7 @@ function formatDate(utcString: string): string {
 .results-table th {
   color: white;
   font-weight: 600;
-  background-color: #182B49;
+  background-color: var(--primary-color, #182B49);
 }
 
 .opponent-cell {

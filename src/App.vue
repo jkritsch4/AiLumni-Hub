@@ -38,6 +38,7 @@ import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import Dashboard from './components/Dashboard.vue'
 import { type TeamData, getTeamData, cacheTeamData, getCachedTeamData, getTeamColors } from './services/api';
 import { initializeTheme, loadTeamTheme } from './services/theme';
+import { DEFAULT_TEAM, getTeamConfig } from './config';
 
 // App state
 const isLoading = ref(true);
@@ -47,13 +48,13 @@ const isOnboardingVisible = ref(true);
 const onboardingComplete = ref(false);
 
 const teamData = ref<TeamData>({
-  team_name: 'UCSD Baseball',
-  team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
+  team_name: DEFAULT_TEAM,
+  team_logo_url: getTeamConfig(DEFAULT_TEAM).defaultLogo
 });
 
 const defaultUniversity = {
-  team_name: 'UCSD Baseball',
-  team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
+  team_name: DEFAULT_TEAM,
+  team_logo_url: getTeamConfig(DEFAULT_TEAM).defaultLogo
 };
 
 // Error handling

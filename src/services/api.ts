@@ -49,12 +49,36 @@ const MOCK_TEAMS: Record<string, TeamData> = generateMockTeams();
 
 export const getTeamData = async (teamName: string = 'UCSD Baseball'): Promise<TeamData> => {
   console.debug('[API] getTeamData called for team:', teamName);
+  
+  // If in test mode, use environment variables
+  if (TEST_MODE) {
+    const envTeamName = import.meta.env.VITE_TEAM_NAME;
+    if (envTeamName) {
+      console.debug('[API] Test mode active, using environment team:', envTeamName);
+      
+      return {
+        team_name: envTeamName,
+        team_logo_url: import.meta.env.VITE_TEAM_LOGO_URL || getTeamConfig(envTeamName).defaultLogo,
+        primaryThemeColor: import.meta.env.VITE_TEAM_PRIMARY_COLOR || getTeamConfig(envTeamName).primaryColor,
+        secondaryThemeColor: import.meta.env.VITE_TEAM_SECONDARY_COLOR || getTeamConfig(envTeamName).secondaryColor,
+        sport: import.meta.env.VITE_TEAM_SPORT || getTeamConfig(envTeamName).sport,
+        standing_type: import.meta.env.VITE_TEAM_CONFERENCE || getTeamConfig(envTeamName).conference
+      };
+    }
+  }
+  
   return MOCK_TEAMS[teamName] || MOCK_TEAMS.default;
 };
 
 export const fetchTeamData = async (teamName: string = 'UCSD Baseball'): Promise<TeamData[]> => {
-  // If we're in test mode, return mock data
+  // If we're in test mode, use environment variables if available
   if (TEST_MODE) {
+    const envTeamName = import.meta.env.VITE_TEAM_NAME;
+    if (envTeamName) {
+      console.log('[API] Test mode active, returning mock data for environment team:', envTeamName);
+      return generateTestData(envTeamName);
+    }
+    
     console.log('[API] Test mode active, returning mock data for:', teamName);
     return generateTestData(teamName);
   }
@@ -78,20 +102,31 @@ const generateTestData = (teamName: string): TeamData[] => {
   const teamConfig = getTeamConfig(teamName);
   const mockData: TeamData[] = [];
   
+  // Get conference from environment variable if in test mode
+  const conference = import.meta.env.VITE_TEST_MODE === 'true' && import.meta.env.VITE_TEAM_CONFERENCE
+    ? import.meta.env.VITE_TEAM_CONFERENCE
+    : teamConfig.conference;
+  
+  // For standings, use the appropriate name format
+  // For USD, use "San Diego" in standings to match what's shown in the screenshot
+  const standingsTeamName = teamName.includes('USD') ? 'San Diego' : teamName;
+  
+  console.log(`[API] Generating mock data for ${teamName} (${standingsTeamName} in standings) in conference: ${conference}`);
+  
   // Add team info with standings data
   mockData.push({
-    team_name: teamName,
+    team_name: standingsTeamName,
     team_logo_url: teamConfig.defaultLogo,
     primaryThemeColor: teamConfig.primaryColor,
     secondaryThemeColor: teamConfig.secondaryColor,
     sport: teamConfig.sport,
-    standing_type: teamConfig.conference,
+    standing_type: conference,
     dataType: 'standings',
-    overall_wins: '27',
-    overall_losses: '28',
-    conf_wins: '15',
-    conf_losses: '15',
-    streak: 'W2'
+    overall_wins: '26',
+    overall_losses: '29',
+    conf_wins: '19',
+    conf_losses: '5',
+    streak: 'L1'
   } as any);
   
   // Add some upcoming games data
@@ -127,18 +162,46 @@ const generateTestData = (teamName: string): TeamData[] => {
     dataType: 'results'
   } as any);
   
-  // Add 9 more teams to the standings (sample conference standings)
-  const conferenceTeams = [
-    'Team A', 'Team B', 'Team C', 'Team D', 
-    'Team E', 'Team F', 'Team G', 'Team H', 'Team I'
-  ];
+  // Generate appropriate teams based on conference
+  let conferenceTeams: string[] = [];
+  
+  // Use different mock teams based on conference
+  if (conference === 'West Coast Conference') {
+    // For USD, add "San Diego" as the first team to match standings format
+    if (teamName.includes('USD')) {
+      conferenceTeams = [
+        'San Diego', 'Gonzaga', 'Saint Mary\'s', 'LMU',
+        'Portland', 'Santa Clara', 'BYU', 'Pacific', 'San Francisco'
+      ];
+    } else {
+      conferenceTeams = [
+        'Gonzaga', 'Saint Mary\'s', 'San Diego', 'LMU',
+        'Portland', 'Santa Clara', 'BYU', 'Pacific', 'San Francisco'
+      ];
+    }
+  } else if (conference === 'Mountain West Conference') {
+    conferenceTeams = [
+      'San Diego State', 'Nevada', 'Fresno State', 'UNLV',
+      'New Mexico', 'Air Force', 'Colorado State', 'Wyoming', 'Boise State'
+    ];
+  } else if (conference === 'Pac-12 Conference') {
+    conferenceTeams = [
+      'USC', 'Stanford', 'Oregon', 'Arizona',
+      'Washington', 'Arizona State', 'Oregon State', 'UCLA', 'California'
+    ];
+  } else { // Default to Big West Conference teams
+    conferenceTeams = [
+      'UC Irvine', 'Cal Poly', 'Cal State Fullerton', 'UC Santa Barbara',
+      'Hawaii', 'Long Beach State', 'UC San Diego', 'UC Davis', 'CSUN'
+    ];
+  }
   
   conferenceTeams.forEach((name, index) => {
     mockData.push({
       team_name: name,
       team_logo_url: '/images/default-logo.png',
       sport: teamConfig.sport,
-      standing_type: teamConfig.conference,
+      standing_type: conference,
       dataType: 'standings',
       overall_wins: `${30 - index}`,
       overall_losses: `${20 + index}`,
@@ -152,13 +215,19 @@ const generateTestData = (teamName: string): TeamData[] => {
 };
 
 export const getTeamLogo = async (teamName: string = 'UCSD Baseball'): Promise<string> => {
+  // If in test mode, use environment variable if available
+  if (TEST_MODE && import.meta.env.VITE_TEAM_LOGO_URL) {
+    console.debug('[API] Test mode active, using environment logo:', import.meta.env.VITE_TEAM_LOGO_URL);
+    return import.meta.env.VITE_TEAM_LOGO_URL;
+  }
+  
   try {
     const data = await fetchTeamData(teamName);
     const team = data.find(item => item.team_name === teamName);
-    return team?.team_logo_url || '/images/ucsd-trident.svg';
+    return team?.team_logo_url || '/images/default-logo.png';
   } catch (error) {
     console.error('Error getting team logo:', error);
-    return '/images/ucsd-trident.svg';
+    return '/images/default-logo.png';
   }
 };
 
@@ -183,6 +252,27 @@ export const getCachedTeamData = (): TeamData | null => {
 };
 
 export const getTeamColors = async (teamName: string = 'UCSD Baseball'): Promise<{ primaryColor: string, secondaryColor: string }> => {
+  // If in test mode, use environment variables if available
+  if (TEST_MODE) {
+    const primaryColor = import.meta.env.VITE_TEAM_PRIMARY_COLOR;
+    const secondaryColor = import.meta.env.VITE_TEAM_SECONDARY_COLOR;
+    
+    if (primaryColor && secondaryColor) {
+      console.debug('[API] Test mode active, using environment colors:', primaryColor, secondaryColor);
+      return { primaryColor, secondaryColor };
+    }
+    
+    // If we have a team name from env but no colors, use config
+    const envTeamName = import.meta.env.VITE_TEAM_NAME;
+    if (envTeamName) {
+      const config = getTeamConfig(envTeamName);
+      return {
+        primaryColor: config.primaryColor,
+        secondaryColor: config.secondaryColor
+      };
+    }
+  }
+  
   try {
     const data = await fetchTeamData(teamName);
     const team = data.find(item => item.team_name === teamName);

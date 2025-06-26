@@ -26,34 +26,49 @@ const props = defineProps({
 
 onMounted(async () => {
   console.log("Selected Sport Prop in Standings:", props.selectedSport);
+  console.log("Subscribed Teams in Standings:", props.subscribedTeams);
   loading.value = true;
   error.value = null;
   try {
+    // Check if we're in test mode
+    const isTestMode = import.meta.env.VITE_TEST_MODE === 'true';
+    let teamStandings = [];
+    let data = [];
+    
+    // If in test mode, directly use the conference from environment variable
+    if (isTestMode && import.meta.env.VITE_TEAM_CONFERENCE) {
+      conferenceFilter.value = import.meta.env.VITE_TEAM_CONFERENCE;
+      console.log(`[Standings] Test mode active, using conference: ${conferenceFilter.value}`);
+    }
+    
     const response = await fetch(apiUrl);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data = await response.json();
-    console.log("API Response Data:", data);
-    let teamStandings = data.filter(item => item.dataType === 'standings');
-    console.log("Filtered Standings Data (dataType=standings):", teamStandings);
+    data = await response.json();
+    console.log("[Standings] API Response Data:", data);
+    teamStandings = data.filter(item => item.dataType === 'standings');
+    console.log("[Standings] Filtered Standings Data (dataType=standings):", teamStandings);
     teamStandings = teamStandings.filter(team => team.sport === props.selectedSport);
-    console.log("Standings after Sport Filter:", teamStandings);
+    console.log("[Standings] Standings after Sport Filter:", teamStandings);
     
-    // Find the team data for the current team to get the conference from standing_type
-    const currentTeamData = data.find(item => 
-      props.subscribedTeams.includes(item.team_name) && 
-      item.sport === props.selectedSport
-    );
-    
-    if (currentTeamData?.standing_type) {
-      conferenceFilter.value = currentTeamData.standing_type;
-      console.log(`Found conference name for ${currentTeamData.team_name}: ${conferenceFilter.value}`);
-    } else {
-      // If no standing_type found, try to get any conference from standings data
-      const anyConference = teamStandings.length > 0 ? teamStandings[0].standing_type : 'Big West Conference';
-      conferenceFilter.value = anyConference;
-      console.log(`Using default conference name: ${conferenceFilter.value}`);
+    // If not in test mode or no conference specified in env, try to get it from data
+    if (!isTestMode || !conferenceFilter.value) {
+      // Find the team data for the current team to get the conference from standing_type
+      const currentTeamData = data.find(item => 
+        props.subscribedTeams.includes(item.team_name) && 
+        item.sport === props.selectedSport
+      );
+      
+      if (currentTeamData?.standing_type) {
+        conferenceFilter.value = currentTeamData.standing_type;
+        console.log(`[Standings] Found conference name for ${currentTeamData.team_name}: ${conferenceFilter.value}`);
+      } else {
+        // If no standing_type found, try to get any conference from standings data
+        const anyConference = teamStandings.length > 0 ? teamStandings[0].standing_type : 'Big West Conference';
+        conferenceFilter.value = anyConference;
+        console.log(`[Standings] Using default conference name: ${conferenceFilter.value}`);
+      }
     }
     
     teamStandings = teamStandings.filter(team => team.standing_type === conferenceFilter.value);
@@ -98,6 +113,13 @@ function isUserTeam(teamName) {
   
   // Check for alternative formats of the same team name
   for (const subscribedTeam of props.subscribedTeams) {
+    // Special case for USD/San Diego
+    if ((subscribedTeam.includes('USD') || subscribedTeam.toLowerCase().includes('san diego')) && 
+        (teamName === 'San Diego' || teamName.includes('USD'))) {
+      console.log(`[Standings] Matched USD team: "${subscribedTeam}" with "${teamName}"`);
+      return true;
+    }
+    
     // Case 1: "UCSD Baseball" vs "UC San Diego"
     if (subscribedTeam.includes('UCSD') && teamName.includes('UC San Diego')) {
       return true;

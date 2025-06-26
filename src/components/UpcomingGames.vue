@@ -26,14 +26,27 @@ const fetchUpcomingGame = async () => {
   error.value = null;
   showingPastGame.value = false;
   try {
+    // Check if we're in test mode
+    const isTestMode = import.meta.env.VITE_TEST_MODE === 'true';
+    const testTeamName = import.meta.env.VITE_TEAM_NAME;
+    
+    let data;
+    // Use API unless we're in test mode
     const response = await fetch(apiUrl);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data = await response.json();
+    data = await response.json();
 
     // Filter for games involving the subscribed teams
-    const teamName = props.subscribedTeams[0] || 'UCSD Baseball';
+    let teamName = props.subscribedTeams[0] || 'UCSD Baseball';
+    
+    // In test mode, override with the environment variable team name
+    if (isTestMode && testTeamName) {
+      console.debug('[UpcomingGames] Test mode active, using team:', testTeamName);
+      teamName = testTeamName;
+    }
+    
     const games = data.filter(game =>
       game.team_name === teamName
     );

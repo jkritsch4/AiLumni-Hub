@@ -10,7 +10,7 @@
     <!-- Loading State -->
     <div v-else-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Loading UCSD Athletics...</p>
+      <p>Loading {{ loadingTeamName }}...</p>
     </div>
     
     <!-- Main App Content -->
@@ -32,12 +32,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import FabNavigation from './components/FabNavigation.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import Dashboard from './components/Dashboard.vue'
 import { type TeamData, getTeamData, cacheTeamData, getCachedTeamData, getTeamColors } from './services/api';
-import { initializeTheme, loadTeamTheme } from './services/theme';
+import { initializeTheme, loadTeamTheme, setThemeColors } from './services/theme';
 import { DEFAULT_TEAM, getTeamConfig } from './config';
 
 // App state
@@ -46,6 +46,9 @@ const hasError = ref(false);
 const errorMessage = ref('');
 const isOnboardingVisible = ref(true);
 const onboardingComplete = ref(false);
+
+// Get team name from environment or default
+const loadingTeamName = computed(() => import.meta.env.VITE_TEAM_NAME || 'UCSD Athletics');
 
 const teamData = ref<TeamData>({
   team_name: DEFAULT_TEAM,
@@ -75,6 +78,31 @@ const resetError = async () => {
 // Fetch the API data, extract the correct team_logo_url and theme colors for the current team
 const fetchAndSetTeamLogo = async () => {
   try {
+    console.debug('[App] Fetching team logo and colors for:', teamData.value.team_name);
+    
+    // If we're in test mode, use config instead of API
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.debug('[App] Test mode active, using environment variables for team data');
+      
+      // Set team data from environment variables or config
+      const teamName = import.meta.env.VITE_TEAM_NAME || 'UCSD Baseball';
+      console.debug('[App] Test mode team name:', teamName);
+      
+      // Update team data
+      teamData.value.team_name = teamName;
+      teamData.value.team_logo_url = import.meta.env.VITE_TEAM_LOGO_URL || getTeamConfig(teamName).defaultLogo;
+      
+      // Load theme colors
+      const primaryColor = import.meta.env.VITE_TEAM_PRIMARY_COLOR || getTeamConfig(teamName).primaryColor;
+      const secondaryColor = import.meta.env.VITE_TEAM_SECONDARY_COLOR || getTeamConfig(teamName).secondaryColor;
+      
+      console.debug(`[App] Loading test theme colors: Primary=${primaryColor}, Secondary=${secondaryColor}`);
+      loadTeamTheme(teamName);
+      
+      return;
+    }
+    
+    // If not in test mode, fetch from API
     const response = await fetch('https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events');
     const data = await response.json();
     // Find the first entry for the current team
@@ -94,7 +122,8 @@ const fetchAndSetTeamLogo = async () => {
       teamData.value.team_logo_url = getTeamConfig(teamData.value.team_name).defaultLogo;
     }
   } catch (e) {
-    teamData.value.team_logo_url = 'https://ucsdtritons.com/images/logos/site/site.png';
+    console.error('[App] Error fetching team logo:', e);
+    teamData.value.team_logo_url = getTeamConfig(teamData.value.team_name).defaultLogo;
   }
 };
 
@@ -103,6 +132,34 @@ const initializeApp = async () => {
   console.debug('[App] Initializing app');
   try {
     isLoading.value = true;
+    
+    // Check test mode first
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.debug('[App] Test mode active, bypassing onboarding');
+      onboardingComplete.value = true;
+      isOnboardingVisible.value = false;
+      
+      // Set team data from environment variables
+      const teamName = import.meta.env.VITE_TEAM_NAME || DEFAULT_TEAM;
+      console.debug('[App] Setting up test team:', teamName);
+      
+      teamData.value = {
+        team_name: teamName,
+        team_logo_url: import.meta.env.VITE_TEAM_LOGO_URL || getTeamConfig(teamName).defaultLogo,
+        sport: import.meta.env.VITE_TEAM_SPORT || 'Baseball',
+        standing_type: import.meta.env.VITE_TEAM_CONFERENCE || getTeamConfig(teamName).conference
+      };
+      
+      // Apply team colors
+      await fetchAndSetTeamLogo();
+      
+      // Cache the test team data
+      cacheTeamData(teamData.value);
+      isLoading.value = false;
+      return;
+    }
+    
+    // Normal flow (non-test mode)
     const completed = localStorage.getItem('onboardingComplete');
     console.debug('[App] Onboarding status:', completed);
 
@@ -129,8 +186,8 @@ const initializeApp = async () => {
         console.error('[App] Error fetching team data:', dataError);
         // Don't show error UI, just use default data
         teamData.value = {
-          team_name: 'UCSD Baseball',
-          team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png'
+          team_name: DEFAULT_TEAM,
+          team_logo_url: getTeamConfig(DEFAULT_TEAM).defaultLogo
         };
       }
     } else {
@@ -171,8 +228,16 @@ const completeOnboarding = async (data: { sports: string[] }) => {
 onMounted(async () => {
   console.log('[App] Component mounted');
   
-  // Initialize theme from cached data before loading the app
-  initializeTheme();
+  // If in test mode, initialize theme from environment variables
+  if (import.meta.env.VITE_TEST_MODE === 'true') {
+    const primaryColor = import.meta.env.VITE_TEAM_PRIMARY_COLOR || '#00275D'; // USD Blue as default
+    const secondaryColor = import.meta.env.VITE_TEAM_SECONDARY_COLOR || '#A3A9AC'; // USD Gray as default
+    console.log('[App] Test mode - setting theme colors:', primaryColor, secondaryColor);
+    setThemeColors(primaryColor, secondaryColor);
+  } else {
+    // Initialize theme from cached data before loading the app
+    initializeTheme();
+  }
   
   await initializeApp();
 });

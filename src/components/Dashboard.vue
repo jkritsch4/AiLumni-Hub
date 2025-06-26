@@ -41,9 +41,28 @@ const sportsList = ref([
 const primaryColor = computed(() => themeColors.value.primaryColor);
 const secondaryColor = computed(() => themeColors.value.secondaryColor);
 
+// Get the test mode status
+const isTestMode = computed(() => import.meta.env.VITE_TEST_MODE === 'true');
+const envTeamName = computed(() => import.meta.env.VITE_TEAM_NAME || 'UCSD Baseball');
+
+// Get the display team name for UI
+const displayTeamName = computed(() => {
+  if (isTestMode.value) {
+    return envTeamName.value;
+  }
+  return userPreferences.selectedSport;
+});
+
 // Get the current team name from props or local storage or default to UCSD Baseball
 const currentTeamName = ref('');
 const subscribedTeams = computed(() => {
+  // If we're in test mode, use environment variable
+  if (isTestMode.value) {
+    const testTeamName = envTeamName.value;
+    console.debug('[Dashboard] Using test team name:', testTeamName);
+    return [testTeamName];
+  }
+  
   const teamName = currentTeamName.value || 'UCSD Baseball';
   // Return various formats of the team name to ensure matching in standings
   return [teamName];
@@ -52,19 +71,27 @@ const teamData = ref<any[]>([]);
 
 onMounted(async () => {
   try {
-    const data = await fetchTeamData();
+    // If we're in test mode, get team name from environment
+    if (isTestMode.value) {
+      currentTeamName.value = envTeamName.value;
+      userPreferences.selectedSport = import.meta.env.VITE_TEAM_SPORT || 'Baseball';
+      console.log('[Dashboard] Test mode active, using team:', currentTeamName.value);
+    } else {
+      // Get the current team name from local storage if available
+      const savedTeamData = localStorage.getItem('teamData');
+      if (savedTeamData) {
+        const parsedData = JSON.parse(savedTeamData);
+        currentTeamName.value = parsedData.team_name;
+        console.log('[Dashboard] Current team name:', currentTeamName.value);
+      } else {
+        currentTeamName.value = 'UCSD Baseball';
+      }
+    }
+    
+    // Always fetch team data
+    const data = await fetchTeamData(currentTeamName.value);
     teamData.value = data;
     console.log('[Dashboard] Loaded team data:', data);
-    
-    // Get the current team name from local storage if available
-    const savedTeamData = localStorage.getItem('teamData');
-    if (savedTeamData) {
-      const parsedData = JSON.parse(savedTeamData);
-      currentTeamName.value = parsedData.team_name;
-      console.log('[Dashboard] Current team name:', currentTeamName.value);
-    } else {
-      currentTeamName.value = 'UCSD Baseball';
-    }
     
     isLoading.value = false;
   } catch (error) {
@@ -104,7 +131,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
               }"
             />
             <h3 class="team-name">
-              {{ userPreferences.selectedSport }}
+              {{ displayTeamName }}
             </h3>
           </div>
         </section>

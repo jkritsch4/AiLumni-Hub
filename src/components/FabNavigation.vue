@@ -57,7 +57,18 @@ const props = defineProps({
 const currentTab = ref('schedule');
 const fabOpen = ref(false);
 const logoUrl = ref(props.teamLogoUrl);
-const universityName = ref(props.teamName);
+
+// Check for test mode
+const isTestMode = computed(() => import.meta.env.VITE_TEST_MODE === 'true');
+const envTeamName = computed(() => import.meta.env.VITE_TEAM_NAME || props.teamName);
+
+// Use computed property to get the university name
+const universityName = computed(() => {
+  if (isTestMode.value) {
+    return envTeamName.value;
+  }
+  return props.teamName;
+});
 
 const currentTabComponent = computed(() => {
   switch (currentTab.value) {

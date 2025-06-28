@@ -137,6 +137,16 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
           all_keys: Object.keys(item)
         });
         
+        // Log raw API data for debugging recent games date sorting
+        if (item.team_name === 'UCSD Baseball' && item.game_outcome && item.game_outcome !== 'Pending') {
+          console.log('[API Debug] Raw completed game data:', {
+            opponent: item.opponent_name,
+            start_time_utc: item.start_time_utc,
+            game_outcome: item.game_outcome,
+            parsedDate: new Date(item.start_time_utc).toLocaleDateString()
+          });
+        }
+        
         const game: Game = {
           game_id: item.game_id || `${item.team_name}-${item.start_time_utc}-${item.opponent_name}`,
           team_name: item.team_name,
@@ -322,6 +332,14 @@ export const getRecentGames = async (teamName?: string): Promise<Game[]> => {
       .slice(0, 10); // Get last 10 games
     
     debug.info(context, `Found ${recentGames.length} recent games for: ${targetTeam}`);
+    debug.info(context, 'Recent games with dates (most recent first):', 
+      recentGames.slice(0, 5).map(game => ({
+        opponent: game.opponent_name,
+        date: game.game_date,
+        outcome: game.game_outcome,
+        parsedDate: new Date(game.game_date).toLocaleDateString()
+      }))
+    );
     return recentGames;
   } catch (error) {
     handleComponentError(context, error);

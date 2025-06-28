@@ -60,13 +60,28 @@ const fetchUpcomingGame = async () => {
       const recentGames = await getRecentGames(currentTeam);
       console.log('[UpcomingGames] API response - recent games (fallback):', {
         count: recentGames?.length || 0,
-        games: recentGames?.slice(0, 3).map(g => ({
+        games: recentGames?.slice(0, 5).map(g => ({
           opponent: g.opponent_name,
           date: g.game_date,
+          parsedDate: new Date(g.game_date).toLocaleDateString(),
+          outcome: g.game_outcome,
           hasOpponentLogo: !!g.opponent_logo_url,
           opponentLogoUrl: g.opponent_logo_url
         })) || []
       });
+      
+      // Additional debugging: Show ALL recent games with dates to verify sorting
+      if (recentGames && recentGames.length > 0) {
+        console.log('[UpcomingGames] ALL recent games in order:', 
+          recentGames.map((g, idx) => ({
+            index: idx,
+            opponent: g.opponent_name,
+            date: g.game_date,
+            timestamp: new Date(g.game_date).getTime(),
+            isFirstGame: idx === 0
+          }))
+        );
+      }
       
       if (recentGames && recentGames.length > 0) {
         nextGame = recentGames[0]; // Already sorted by most recent

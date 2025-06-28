@@ -1,0 +1,296 @@
+<template>
+  <div class="recent-results-section">
+    <div v-if="loading" class="loading">Loading recent results...</div>
+    <div v-if="error" class="error">Error loading results: {{ error?.message }}</div>
+    <div v-if="!loading && !error && recentResults.length > 0" class="results-table-container">
+      <table class="results-table">
+        <thead>
+          <tr :style="{ backgroundColor: primaryColor }">
+            <th>Opponent</th>
+            <th>Date</th>
+            <th>Location</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="result in recentResults" :key="result.game_id">
+            <td class="opponent-cell">
+              <img
+                :src="result.opponent_logo_url || '/images/default-logo.png'"
+                :alt="result.opponent_name + ' Logo'"
+                class="opponent-logo"
+                @error="(event: Event) => { 
+                  const target = event.target as HTMLImageElement;
+                  if (target) {
+                    target.src = '/images/default-logo.png';
+                  }
+                }"
+              />
+              <span class="opponent-name">{{ result.opponent_name }}</span>
+            </td>
+            <td>{{ formatDate(result.game_date) }}</td>
+            <td>{{ getLocationText(result) }}</td>
+            <td :class="{ 
+              'win': result.game_outcome === 'W', 
+              'loss': result.game_outcome === 'L',
+              'tie': result.game_outcome === 'T'
+            }">
+              {{ formatGameResult(result) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-if="!loading && !error && recentResults.length === 0" class="no-results">
+      No recent results found for {{ props.subscribedTeams.join(', ') }}.
+    </p>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, defineProps, watch } from 'vue';
+import { getRecentGames, getCurrentTeam, type Game } from '../services/api';
+import { themeColors } from '../services/theme';
+import { debug, createDebugContext, handleComponentError } from '../utils/debug';
+
+const recentResults = ref<Game[]>([]);
+const loading = ref(true);
+const error = ref<Error | null>(null);
+const limit = 5;
+
+// Receive subscribedTeams and primaryColor props
+const props = defineProps({
+  subscribedTeams: {
+    type: Array as () => string[],
+    required: true,
+    default: () => []
+  },
+  primaryColor: {
+    type: String,
+    default: '#007bff'
+  }
+});
+
+async function loadRecentResults() {
+  const context = createDebugContext('RecentResults', 'loadRecentResults', { subscribedTeams: props.subscribedTeams });
+  
+  try {
+    loading.value = true;
+    error.value = null;
+    
+    debug.info(context, `Loading recent results for teams: ${props.subscribedTeams.join(', ')}`);
+    
+    // Get current team (should match subscribed teams)
+    const currentTeam = getCurrentTeam();
+    const teamToFetch = props.subscribedTeams.includes(currentTeam) ? currentTeam : props.subscribedTeams[0];
+    
+    if (!teamToFetch) {
+      debug.warn(context, 'No team specified for recent results');
+      recentResults.value = [];
+      return;
+    }
+    
+    debug.info(context, `Fetching recent games for team: ${teamToFetch}`);
+    const games = await getRecentGames(teamToFetch);
+    
+    recentResults.value = games.slice(0, limit);
+    debug.info(context, `Loaded ${recentResults.value.length} recent results`);
+    
+  } catch (err) {
+    handleComponentError(context, err);
+    error.value = err instanceof Error ? err : new Error('Failed to load recent results');
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(() => {
+  loadRecentResults();
+});
+
+// Watch for changes in subscribed teams
+watch(() => props.subscribedTeams, () => {
+  debug.info(createDebugContext('RecentResults', 'watch'), 'Subscribed teams changed, reloading results');
+  loadRecentResults();
+}, { deep: true });
+
+function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  } catch {
+    return dateString;
+  }
+}
+
+function formatGameResult(game: Game): string {
+  if (!game.team_score || !game.opponent_score) {
+    return `${game.game_outcome || 'N/A'}`;
+  }
+  
+  const teamScore = parseInt(game.team_score.toString());
+  const oppScore = parseInt(game.opponent_score.toString());
+  
+  if (isNaN(teamScore) || isNaN(oppScore)) {
+    return `${game.game_outcome || 'N/A'}`;
+  }
+  
+  const result = game.game_outcome === 'W' ? 'W' : 
+                 game.game_outcome === 'L' ? 'L' : 'T';
+  
+  return `${result} ${teamScore}-${oppScore}`;
+}
+
+function getLocationText(game: Game): string {
+  // Use game_location if available, otherwise fall back to home/away logic
+  if (game.game_location) {
+    return game.game_location;
+  }
+  return game.home_away === 'Home' ? 'Home' : `@ ${game.opponent_name}`;
+}
+</script>
+
+<style scoped>
+.recent-results-section {
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1rem;
+  background-color: transparent;
+  border-radius: 8px;
+  color: white;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 20px;
+  color: white;
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+.error {
+  color: #ff6b6b;
+}
+
+.results-table-container {
+  overflow-x: auto;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: rgba(24, 43, 73, 0.9);
+  color: white;
+  border-radius: 8px;
+  font-size: 1em;
+  font-family: 'Bebas Neue', sans-serif;
+  box-sizing: border-box;
+  margin: 0 auto;
+  text-align: left;
+  overflow: hidden;
+}
+
+.results-table th, .results-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 1.1em;
+  letter-spacing: 0.5px;
+}
+
+.results-table th {
+  font-weight: bold;
+  color: white;
+  background-color: var(--primary-color, #182B49);
+  text-transform: uppercase;
+  font-size: 1em;
+}
+
+.results-table tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.results-table tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.results-table tr:last-child td {
+  border-bottom: none;
+}
+
+.opponent-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  text-align: left !important;
+}
+
+.opponent-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  background: transparent;
+  border-radius: 4px;
+}
+
+.opponent-name {
+  font-weight: 500;
+  font-size: 1em;
+}
+
+.win {
+  color: var(--secondary-color, #4caf50);
+  font-weight: bold;
+}
+
+.loss {
+  color: #f44336;
+  font-weight: bold;
+}
+
+.tie {
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.no-results {
+  color: white;
+  padding: 15px;
+  text-align: center;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  margin: 15px auto;
+  max-width: 80%;
+}
+
+@media (max-width: 768px) {
+  .results-table {
+    font-size: 0.8em;
+  }
+  
+  .results-table th, .results-table td {
+    padding: 8px 4px;
+  }
+  
+  .opponent-cell {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center !important;
+  }
+  
+  .school-logo {
+    width: 20px;
+    height: 20px;
+  }
+}
+</style>

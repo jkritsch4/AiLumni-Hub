@@ -128,6 +128,15 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
       
       // Check if this item is a game (has start_time_utc and opponent)
       if (item.start_time_utc && item.opponent_name) {
+        // Debug raw API data for opponent logo
+        console.log('[API] Raw game item opponent logo data:', {
+          opponent_name: item.opponent_name,
+          opponent_logo_url: item.opponent_logo_url,
+          opponent_logo_type: typeof item.opponent_logo_url,
+          opponent_logo_raw: JSON.stringify(item.opponent_logo_url),
+          all_keys: Object.keys(item)
+        });
+        
         const game: Game = {
           game_id: item.game_id || `${item.team_name}-${item.start_time_utc}-${item.opponent_name}`,
           team_name: item.team_name,

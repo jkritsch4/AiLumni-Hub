@@ -86,7 +86,9 @@ const fetchUpcomingGame = async () => {
         opponent_logo_url: nextGame.opponent_logo_url,
         game_date: nextGame.game_date,
         game_location: nextGame.game_location,
-        showingPastGame: showingPastGame.value
+        showingPastGame: showingPastGame.value,
+        // Full object for debugging
+        fullGameObject: JSON.stringify(nextGame, null, 2)
       });
       
       // Get team info to get the correct logo
@@ -95,11 +97,17 @@ const fetchUpcomingGame = async () => {
       console.log('[UpcomingGames] Team logo URL:', teamLogo);
       
       // Use opponent_logo_url directly from API - no fallbacks
-      const opponentLogo = nextGame.opponent_logo_url;
+      const opponentLogo = nextGame.opponent_logo_url && nextGame.opponent_logo_url.trim() !== '' 
+        ? nextGame.opponent_logo_url 
+        : null;
       console.log('[UpcomingGames] Opponent logo availability:', {
         hasOpponentLogo: !!opponentLogo,
         opponentLogoUrl: opponentLogo,
-        willShowPendingText: !opponentLogo
+        opponentLogoType: typeof opponentLogo,
+        opponentLogoLength: opponentLogo ? opponentLogo.length : 0,
+        willShowPendingText: !opponentLogo,
+        rawOpponentLogoValue: JSON.stringify(nextGame.opponent_logo_url),
+        afterTrimCheck: nextGame.opponent_logo_url ? `"${nextGame.opponent_logo_url.trim()}"` : 'null/undefined'
       });
       
       upcomingGame.value = {
@@ -214,7 +222,7 @@ const handleImageLoad = (event) => {
         </div>
         
         <div class="team opponent-team">
-          <img v-if="upcomingGame.opponentLogo" 
+          <img v-if="upcomingGame.opponentLogo && upcomingGame.opponentLogo.trim() !== ''" 
                :src="upcomingGame.opponentLogo" 
                :alt="opponentTeamName" 
                @error="handleImageError"

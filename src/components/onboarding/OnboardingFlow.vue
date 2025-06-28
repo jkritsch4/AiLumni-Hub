@@ -152,7 +152,7 @@ watch(() => props.isVisible, (newValue) => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(24, 43, 73, 0.85); /* UCSD Blue with opacity */
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
   z-index: -1;
 }
 
@@ -183,7 +183,7 @@ watch(() => props.isVisible, (newValue) => {
 
 .progress-fill {
   height: 100%;
-  background: #FFB81C; /* UCSD Gold */
+  background: var(--progress-color, var(--secondary-color, #FFB81C));
   transition: width 0.3s ease-in-out;
 }
 
@@ -203,7 +203,7 @@ watch(() => props.isVisible, (newValue) => {
 }
 
 .dot.active {
-  background: #182B49;
+  background: var(--primary-color, #182B49);
 }
 
 .slide-enter-active,

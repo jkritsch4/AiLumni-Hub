@@ -57,18 +57,7 @@ const props = defineProps({
 const currentTab = ref('schedule');
 const fabOpen = ref(false);
 const logoUrl = ref(props.teamLogoUrl);
-
-// Check for test mode
-const isTestMode = computed(() => import.meta.env.VITE_TEST_MODE === 'true');
-const envTeamName = computed(() => import.meta.env.VITE_TEAM_NAME || props.teamName);
-
-// Use computed property to get the university name
-const universityName = computed(() => {
-  if (isTestMode.value) {
-    return envTeamName.value;
-  }
-  return props.teamName;
-});
+const universityName = ref(props.teamName);
 
 const currentTabComponent = computed(() => {
   switch (currentTab.value) {
@@ -134,9 +123,9 @@ onMounted(() => {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background-color: var(--primary-color, #182B49);
-  color: white;
-  border: 2px solid var(--secondary-color, #ffcd00);
+  background-color: var(--fab-color, var(--secondary-color, #FFCD00));
+  color: var(--primary-color, #182B49);
+  border: 2px solid var(--primary-color, #182B49);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -149,8 +138,8 @@ onMounted(() => {
 
 .fab-main:hover {
   transform: scale(1.1);
-  background-color: var(--secondary-color, #ffcd00);
-  color: black;
+  background-color: var(--fab-hover-color, var(--accent-hover-color, #FFC107));
+  color: var(--primary-color, #182B49);
 }
 
 .fab-option {
@@ -168,9 +157,9 @@ onMounted(() => {
 
 .fab-option:hover,
 .fab-option.active {
-  background-color: var(--secondary-color, #ffcd00);
-  border-color: var(--secondary-color, #ffcd00);
-  color: black;
+  background-color: var(--accent-color, var(--secondary-color, #FFCD00));
+  border-color: var(--accent-color, var(--secondary-color, #FFCD00));
+  color: var(--primary-color, #182B49);
   transform: scale(1.05);
 }
 

@@ -142,4 +142,3 @@ button.confirm-button:hover {
   transform: translateY(-2px);
 }
 </style>
-

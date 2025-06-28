@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, computed, watch } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
 import SkeletonLoader from './ui/SkeletonLoader.vue';
-import { fetchTeamData } from '../services/api';
-import { themeColors } from '../services/theme';
+import { 
+  getCurrentTeam, 
+  setCurrentTeam, 
+  getTeamInfo, 
+  getAllTeams,
+  type TeamInfo 
+} from '../services/api';
+import { themeColors, loadTeamTheme } from '../services/theme';
+import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 // Props
 const props = defineProps({
@@ -17,90 +24,74 @@ const props = defineProps({
 
 // State management
 const isLoading = ref(true);
-const upcomingGameData = ref({});
-const recentResultsData = ref();
-const standingsData = ref();
-// Use the trident logo as default
-const homeTeamLogo = ref(props.homeTeamLogo || '/images/ucsd-trident.svg');
+const currentTeamInfo = ref<TeamInfo | null>(null);
+const allTeams = ref<TeamInfo[]>([]);
+const homeTeamLogo = ref(props.homeTeamLogo || '/images/default-logo.png');
 const userPreferences = reactive({
   selectedSport: 'Baseball',
   notificationPreferences: [],
   receiveDailyDashboardLink: false
 });
 
-const sportsList = ref([
-  'Baseball',
-  "Basketball (Men's)",
-  "Basketball (Women's)",
-  "Soccer (Men's)",
-  "Soccer (Women's)",
-  'Softball'
-]);
+// Use dynamic team colors
+const primaryColor = computed(() => themeColors.primary);
+const secondaryColor = computed(() => themeColors.secondary);
 
-// Use dynamic team colors instead of hardcoded values
-const primaryColor = computed(() => themeColors.value.primaryColor);
-const secondaryColor = computed(() => themeColors.value.secondaryColor);
+// Current team name for display and API calls
+const currentTeamName = computed(() => currentTeamInfo.value?.team_name || 'UCSD Baseball');
+const subscribedTeams = computed(() => [currentTeamName.value]);
 
-// Get the test mode status
-const isTestMode = computed(() => import.meta.env.VITE_TEST_MODE === 'true');
-const envTeamName = computed(() => import.meta.env.VITE_TEAM_NAME || 'UCSD Baseball');
-
-// Get the display team name for UI
-const displayTeamName = computed(() => {
-  if (isTestMode.value) {
-    return envTeamName.value;
-  }
-  return userPreferences.selectedSport;
-});
-
-// Get the current team name from props or local storage or default to UCSD Baseball
-const currentTeamName = ref('');
-const subscribedTeams = computed(() => {
-  // If we're in test mode, use environment variable
-  if (isTestMode.value) {
-    const testTeamName = envTeamName.value;
-    console.debug('[Dashboard] Using test team name:', testTeamName);
-    return [testTeamName];
-  }
-  
-  const teamName = currentTeamName.value || 'UCSD Baseball';
-  // Return various formats of the team name to ensure matching in standings
-  return [teamName];
-});
-const teamData = ref<any[]>([]);
-
+// Load team data on mount
 onMounted(async () => {
+  const context = createDebugContext('Dashboard', 'onMounted');
+  
   try {
-    // If we're in test mode, get team name from environment
-    if (isTestMode.value) {
-      currentTeamName.value = envTeamName.value;
-      userPreferences.selectedSport = import.meta.env.VITE_TEAM_SPORT || 'Baseball';
-      console.log('[Dashboard] Test mode active, using team:', currentTeamName.value);
-    } else {
-      // Get the current team name from local storage if available
-      const savedTeamData = localStorage.getItem('teamData');
-      if (savedTeamData) {
-        const parsedData = JSON.parse(savedTeamData);
-        currentTeamName.value = parsedData.team_name;
-        console.log('[Dashboard] Current team name:', currentTeamName.value);
-      } else {
-        currentTeamName.value = 'UCSD Baseball';
-      }
+    debug.info(context, 'Starting Dashboard initialization');
+    
+    // Load all available teams
+    allTeams.value = await getAllTeams();
+    debug.info(context, `Loaded ${allTeams.value.length} teams`);
+    
+    // Get current team or default to UCSD Baseball
+    const currentTeam = getCurrentTeam();
+    debug.info(context, `Current team: ${currentTeam}`);
+    
+    // Load team info for the current team
+    currentTeamInfo.value = await getTeamInfo(currentTeam);
+    debug.info(context, 'Current team info loaded', currentTeamInfo.value);
+    
+    // Update logo
+    if (currentTeamInfo.value?.team_logo_url) {
+      homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
+      debug.info(context, 'Team logo updated', { logoUrl: homeTeamLogo.value });
     }
     
-    // Always fetch team data
-    const data = await fetchTeamData(currentTeamName.value);
-    teamData.value = data;
-    console.log('[Dashboard] Loaded team data:', data);
+    // Load team theme colors
+    if (currentTeamInfo.value) {
+      await loadTeamTheme(currentTeamInfo.value.team_name);
+      debug.info(context, `Theme loaded for: ${currentTeamInfo.value.team_name}`);
+    }
+    
+    // Update user preferences sport
+    if (currentTeamInfo.value?.sport) {
+      userPreferences.selectedSport = currentTeamInfo.value.sport;
+      debug.info(context, `Sport updated to: ${userPreferences.selectedSport}`);
+    }
     
     isLoading.value = false;
+    debug.info(context, 'Dashboard initialization completed successfully');
   } catch (error) {
-    console.error('[Dashboard] Error loading team data:', error);
+    handleComponentError(context, error);
     isLoading.value = false;
   }
 });
 
-const emit = defineEmits(['team-logo-loaded']);
+// Watch for theme changes
+watch(() => themeColors, (newColors) => {
+  debug.info(createDebugContext('Dashboard', 'themeWatch'), 'Theme colors updated', newColors);
+}, { deep: true });
+
+const emit = defineEmits(['team-logo-loaded', 'team-changed']);
 
 const handleTeamLogoLoaded = (newLogoUrl: string) => {
   console.log('[Dashboard] Team logo loaded:', newLogoUrl);
@@ -109,6 +100,57 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
     emit('team-logo-loaded', newLogoUrl);
   }
 };
+
+// Function to switch teams (can be called from outside or dev tools)
+const switchTeam = async (teamName: string) => {
+  console.log('[Dashboard] Switching to team:', teamName);
+  
+  try {
+    isLoading.value = true;
+    
+    // Set the new current team
+    setCurrentTeam(teamName);
+    
+    // Load new team info
+    currentTeamInfo.value = await getTeamInfo(teamName);
+    
+    // Update logo
+    if (currentTeamInfo.value?.team_logo_url) {
+      homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
+    }
+    
+    // Load new theme
+    await loadTeamTheme(teamName);
+    
+    // Update sport preference
+    if (currentTeamInfo.value?.sport) {
+      userPreferences.selectedSport = currentTeamInfo.value.sport;
+    }
+    
+    // Emit team change event
+    emit('team-changed', teamName);
+    
+    isLoading.value = false;
+    
+    console.log('[Dashboard] Successfully switched to:', teamName);
+  } catch (error) {
+    console.error('[Dashboard] Error switching team:', error);
+    isLoading.value = false;
+  }
+};
+
+// Expose switchTeam function for external use (dev tools, etc.)
+defineExpose({
+  switchTeam,
+  currentTeamName,
+  allTeams
+});
+
+// Add to window for dev console access
+if (typeof window !== 'undefined') {
+  (window as any).dashboardSwitchTeam = switchTeam;
+  (window as any).getAllTeams = () => allTeams.value;
+}
 </script>
 
 <template>
@@ -131,7 +173,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
               }"
             />
             <h3 class="team-name">
-              {{ displayTeamName }}
+              {{ userPreferences.selectedSport }}
             </h3>
           </div>
         </section>
@@ -266,6 +308,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
   width: 100px;
   height: auto;
   margin-top: 40px;
+  background: transparent;
   filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.3));
 }
 
@@ -395,6 +438,7 @@ const handleTeamLogoLoaded = (newLogoUrl: string) => {
   align-items: center;
   justify-content: center;
   margin-bottom: 1rem;
+  background: transparent;
 }
 
 .team-name {

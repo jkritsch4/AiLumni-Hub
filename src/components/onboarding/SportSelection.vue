@@ -81,7 +81,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
   z-index: 1;
 }
 
@@ -132,8 +132,8 @@ h2 {
 }
 
 .sport-card.selected {
-  border-color: #FFB81C;
-  background: rgba(255, 184, 28, 0.1);
+  border-color: var(--accent-color, var(--secondary-color, #FFB81C));
+  background: var(--background-overlay-light, rgba(255, 184, 28, 0.1));
 }
 
 .navigation-buttons {
@@ -168,13 +168,13 @@ h2 {
 }
 
 .primary-button {
-  background: #FFB81C;
-  color: #000;
+  background: var(--accent-color, var(--secondary-color, #FFB81C));
+  color: var(--primary-color, #000);
   font-weight: 600;
 }
 
 .primary-button:hover {
-  background: #ffc64c;
+  background: var(--accent-hover-color, #ffc64c);
   transform: translateY(-2px);
 }
 

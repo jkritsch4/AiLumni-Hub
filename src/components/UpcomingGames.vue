@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted, defineProps, defineEmits, computed } from 'vue';
+import { getUpcomingGames, getCurrentTeam, getRecentGames, getTeamInfo } from '../services/api';
 import { themeColors } from '../services/theme';
+import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 const props = defineProps({
   subscribedTeams: {
@@ -14,7 +16,6 @@ const emit = defineEmits(['team-logo-loaded']);
 const upcomingGame = ref(null);
 const loading = ref(true);
 const error = ref(null);
-const apiUrl = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events';
 const showingPastGame = ref(false);
 
 onMounted(async () => {
@@ -25,64 +26,54 @@ const fetchUpcomingGame = async () => {
   loading.value = true;
   error.value = null;
   showingPastGame.value = false;
+  
   try {
-    // Check if we're in test mode
-    const isTestMode = import.meta.env.VITE_TEST_MODE === 'true';
-    const testTeamName = import.meta.env.VITE_TEAM_NAME;
+    const currentTeam = getCurrentTeam();
+    console.log('[UpcomingGames] Fetching games for team:', currentTeam);
     
-    let data;
-    // Use API unless we're in test mode
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    data = await response.json();
-
-    // Filter for games involving the subscribed teams
-    let teamName = props.subscribedTeams[0] || 'UCSD Baseball';
+    // Try to get upcoming games first
+    let games = await getUpcomingGames(currentTeam);
+    console.log('[UpcomingGames] Upcoming games:', games);
     
-    // In test mode, override with the environment variable team name
-    if (isTestMode && testTeamName) {
-      console.debug('[UpcomingGames] Test mode active, using team:', testTeamName);
-      teamName = testTeamName;
-    }
+    let nextGame = null;
     
-    const games = data.filter(game =>
-      game.team_name === teamName
-    );
-
-    const now = new Date();
-
-    // Find the next upcoming game
-    let nextGame = games
-      .filter(game => new Date(game.start_time_utc) > now)
-      .sort((a, b) => new Date(a.start_time_utc) - new Date(b.start_time_utc))[0];
-
-    // If no upcoming game, find the most recent past game
-    if (!nextGame) {
-      nextGame = games
-        .filter(game => new Date(game.start_time_utc) <= now)
-        .sort((a, b) => new Date(b.start_time_utc) - new Date(a.start_time_utc))[0];
-      if (nextGame) {
+    if (games && games.length > 0) {
+      // Sort by game date and get the next upcoming game
+      nextGame = games.sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())[0];
+    } else {
+      // If no upcoming games, get the most recent past game
+      const recentGames = await getRecentGames(currentTeam);
+      console.log('[UpcomingGames] Recent games (fallback):', recentGames);
+      
+      if (recentGames && recentGames.length > 0) {
+        nextGame = recentGames[0]; // Already sorted by most recent
         showingPastGame.value = true;
       }
     }
 
     if (nextGame) {
-      console.log('Home logo:', nextGame.team_logo_url);
-      console.log('Away logo:', nextGame.opponent_logo_url);
+      console.log('[UpcomingGames] Selected game:', nextGame);
+      
+      // Get team info to get the correct logo
+      const teamInfo = await getTeamInfo(nextGame.team_name);
+      const teamLogo = teamInfo?.team_logo_url || '/images/default-logo.png';
+      
       upcomingGame.value = {
         ...nextGame,
-        homeTeamLogo: nextGame.team_logo_url && nextGame.team_logo_url !== '' ? nextGame.team_logo_url : '/images/default-logo.png',
-        awayTeamLogo: nextGame.opponent_logo_url && nextGame.opponent_logo_url !== '' ? nextGame.opponent_logo_url : '/images/default-logo.png',
-        startTime: nextGame.start_time_utc,
-        location: nextGame.game_location
+        ucsdLogo: teamLogo, // Always UCSD logo on the left
+        opponentLogo: nextGame.opponent_logo_url || '/images/default-logo.png', // Opponent logo on the right
+        startTime: nextGame.game_date,
+        location: nextGame.game_location || (nextGame.home_away === 'Home' ? 'Home' : `@ ${nextGame.opponent_name}`)
       };
-      emit('team-logo-loaded', upcomingGame.value.homeTeamLogo);
+      
+      // Emit the team logo for the selected team (our team, not opponent)
+      emit('team-logo-loaded', teamLogo);
     } else {
+      console.log('[UpcomingGames] No games found');
       upcomingGame.value = null;
     }
   } catch (e) {
+    console.error('[UpcomingGames] Error fetching games:', e);
     error.value = e;
   } finally {
     loading.value = false;
@@ -92,167 +83,204 @@ const fetchUpcomingGame = async () => {
 const formattedTime = computed(() => {
   if (!upcomingGame.value?.startTime) return '';
   const date = new Date(upcomingGame.value.startTime);
-  // Format: Friday, March 14th at 6:30PM PST
+  // Format: FRI, MAR 14 AT 6:30 PM PDT
   return date.toLocaleString('en-US', {
-    weekday: 'long',
-    month: 'long',
+    weekday: 'short',
+    month: 'short', 
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
     timeZoneName: 'short'
-  });
+  }).toUpperCase().replace(',', ',');
 });
 
 const formattedLocation = computed(() => {
   if (!upcomingGame.value?.location) return '';
-  // Only show city/state (before comma)
-  const parts = upcomingGame.value.location.split(',');
-  return parts.length > 1 ? `${parts[0]},${parts[1]}`.replace('/','').trim() : upcomingGame.value.location;
+  return upcomingGame.value.location.toUpperCase();
+});
+
+// UCSD is always shown on the left, opponent on the right
+const ucsdTeamName = computed(() => {
+  if (!upcomingGame.value) return '';
+  return upcomingGame.value.team_name; // This should be UCSD Baseball
+});
+
+const opponentTeamName = computed(() => {
+  if (!upcomingGame.value) return '';
+  return upcomingGame.value.opponent_name;
+});
+
+const gameResult = computed(() => {
+  if (!upcomingGame.value || !showingPastGame.value) return '';
+  if (upcomingGame.value.game_outcome) {
+    const score = upcomingGame.value.team_score !== undefined && upcomingGame.value.opponent_score !== undefined
+      ? ` ${upcomingGame.value.team_score}-${upcomingGame.value.opponent_score}`
+      : '';
+    return `${upcomingGame.value.game_outcome}${score}`;
+  }
+  return '';
 });
 </script>
 
 <template>
-  <div class="upcoming-games-section">
-    <div v-if="loading" class="loading-container">
-      <div class="modern-loader">
-        <div class="dot"></div>
-        <div class="dot"></div>
-        <div class="dot"></div>
-      </div>
-      <p>Loading games...</p>
+  <div class="upcoming-game-container">
+    <div v-if="loading" class="loading">
+      Loading game information...
     </div>
-    <div v-if="error" class="error-message">Error loading games: {{ error.message }}</div>
-    <div class="upcoming-game" v-if="!loading && !error && upcomingGame">
-      <div class="logos">
-        <img :src="upcomingGame.homeTeamLogo" alt="Home Team Logo" />
-        <span>VS.</span>
-        <img :src="upcomingGame.awayTeamLogo" alt="Away Team Logo" />
+    
+    <div v-else-if="error" class="error">
+      Error loading game data
+    </div>
+    
+    <div v-else-if="upcomingGame" class="upcoming-game">
+      <div class="teams">
+        <div class="team ucsd-team">
+          <img :src="upcomingGame.ucsdLogo" :alt="ucsdTeamName" />
+        </div>
+        
+        <div class="vs-section">
+          <span class="vs-text">{{ showingPastGame ? 'FINAL' : 'VS.' }}</span>
+          <div v-if="showingPastGame && gameResult" class="game-result">
+            {{ gameResult }}
+          </div>
+        </div>
+        
+        <div class="team opponent-team">
+          <img :src="upcomingGame.opponentLogo" :alt="opponentTeamName" />
+        </div>
       </div>
+      
       <div class="game-info">
         <div class="game-time">
-          TIME: {{ formattedTime }}
+          <strong>TIME:</strong> {{ formattedTime }}
         </div>
         <div class="game-location">
-          LOCATION: {{ formattedLocation }}
+          <strong>LOCATION:</strong> {{ formattedLocation }}
         </div>
         <div v-if="showingPastGame" class="past-indicator">
           MOST RECENT GAME (NEW SCHEDULE PENDING)
         </div>
       </div>
     </div>
+    
+    <div v-else class="no-games">
+      No upcoming games scheduled
+    </div>
   </div>
 </template>
 
 <style scoped>
-.upcoming-games-section {
-  position: relative;
+.upcoming-game-container {
+  padding: 1rem;
+  color: white;
+  text-align: center;
 }
 
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.loading, .error, .no-games {
   color: white;
   font-family: 'Bebas Neue', sans-serif;
   font-size: 1.2em;
-  margin-top: 30px;
-  margin-bottom: 30px;
-}
-
-.modern-loader {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: white;
-  opacity: 0.7;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.dot:nth-child(1) {
-  animation-delay: -0.32s;
-  background-color: var(--secondary-color, #FFCD00);
-}
-
-.dot:nth-child(2) {
-  animation-delay: -0.16s;
-  background-color: white;
-}
-
-.dot:nth-child(3) {
-  animation-delay: 0s;
-  background-color: var(--primary-color, #182B49);
-}
-
-@keyframes pulse {
-  0%, 80%, 100% { 
-    transform: scale(0.6);
-    opacity: 0.6;
-  }
-  40% { 
-    transform: scale(1.2);
-    opacity: 1;
-  }
-}
-
-.error-message {
-  color: red;
   text-align: center;
-  margin: 20px 0;
+  padding: 2rem;
 }
 
 .upcoming-game {
-  text-align: center;
-  margin: 20px 0;
-}
-.logos {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.teams {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  gap: 24px;
+  gap: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 1rem 0;
 }
-img {
-  max-height: 64px;
-  max-width: 64px;
+
+.team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.team img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
   border-radius: 8px;
-  background: transparent;
 }
-span {
-  color: white;
+
+.vs-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 100px;
+}
+
+.vs-text {
+  font-family: 'Bebas Neue', sans-serif;
   font-size: 2em;
-  font-family: 'Bebas Neue', sans-serif;
-}
-.game-info {
-  color: white;
-  font-family: 'Bebas Neue', sans-serif;
-}
-.game-time {
-  font-size: 1.2em;
-}
-.game-location {
-  font-size: 1em;
-  color: #aaa;
-}
-.past-indicator {
-  color: var(--secondary-color, #FFCD00);
-  font-size: 1em;
-  margin-top: 10px;
-  background-color: transparent;
-  display: inline-block;
-  padding: 10px 20px;
-  border-radius: 0;
   font-weight: bold;
-  width: 100%;
-  box-sizing: border-box;
-  max-width: 425px;
+  color: var(--secondary-color, #ffcd00);
+  letter-spacing: 2px;
+}
+
+.game-result {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4em;
+  color: var(--secondary-color, #ffcd00);
+  font-weight: bold;
+}
+
+.game-info {
+  font-family: 'Bebas Neue', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+.game-time, .game-location {
+  font-size: 1.4em;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.game-time strong, .game-location strong {
+  color: white;
+  margin-right: 0.5rem;
+}
+
+.past-indicator {
+  font-size: 1em;
+  color: var(--secondary-color, #ffcd00);
+  margin-top: 1rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 480px) {
+  .teams {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .vs-section {
+    transform: rotate(90deg);
+    margin: 0.5rem 0;
+  }
+  
+  .team img {
+    width: 50px;
+    height: 50px;
+  }
 }
 </style>

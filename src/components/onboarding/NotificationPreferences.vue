@@ -110,7 +110,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
   z-index: 1;
 }
 
@@ -162,8 +162,8 @@ h2 {
 }
 
 .preference-item.selected {
-  border-color: #FFB81C;
-  background: rgba(255, 184, 28, 0.1);
+  border-color: var(--accent-color, var(--secondary-color, #FFB81C));
+  background: var(--background-overlay-light, rgba(255, 184, 28, 0.1));
 }
 
 .preference-content {
@@ -186,7 +186,7 @@ h2 {
 .checkbox {
   width: 24px;
   height: 24px;
-  border: 2px solid #FFB81C;
+  border: 2px solid var(--accent-color, var(--secondary-color, #FFB81C));
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -196,7 +196,7 @@ h2 {
 .checkbox-inner {
   width: 14px;
   height: 14px;
-  background-color: #FFB81C;
+  background-color: var(--accent-color, var(--secondary-color, #FFB81C));
   border-radius: 3px;
 }
 
@@ -231,13 +231,13 @@ h2 {
 }
 
 .primary-button {
-  background: #FFB81C;
-  color: #000;
+  background: var(--accent-color, var(--secondary-color, #FFB81C));
+  color: var(--primary-color, #000);
   font-weight: 600;
 }
 
 .primary-button:hover {
-  background: #ffc64c;
+  background: var(--accent-hover-color, #ffc64c);
   transform: translateY(-2px);
 }
 

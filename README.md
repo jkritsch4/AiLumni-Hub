@@ -1,32 +1,16 @@
-# AiLumni-Hub: University Sports Fan Dashboard
+## AWS Amplify Vue.js Starter Template
 
-A dynamic sports dashboard app for university athletics fans, displaying personalized team schedules, standings, and updates with a modern UI.
+This repository provides a starter template for creating applications using Vue.js and AWS Amplify, emphasizing easy setup for authentication, API, and database capabilities.
 
 ## Overview
 
-AiLumni-Hub provides university sports fans with a personalized dashboard for following their favorite teams. The app offers standings tables, upcoming games, recent results, and fundraising options with a clean, modern interface optimized for both desktop and mobile viewing.
+This template equips you with a foundational Vue application integrated with AWS Amplify, streamlined for scalability and performance. It is ideal for developers looking to jumpstart their project with pre-configured AWS services like Cognito, AppSync, and DynamoDB.
 
 ## Features
 
-- **Team Dashboard**: View standings, upcoming games, and recent results
-- **Dynamic Theming**: Colors adapt to the selected team's branding
-- **Team Selection**: Support for multiple universities and sports
-- **Modern UI**: Responsive design with smooth transitions and intuitive navigation
-- **Offline Support**: Caching for offline viewing capabilities
-
-## Team Testing Framework
-
-AiLumni-Hub includes a powerful testing framework that makes it easy to test new teams without manual configuration. See [TESTING.md](TESTING.md) for details.
-
-Quick test with a predefined team:
-```bash
-./test-team.sh --usd
-```
-
-Or create a custom team:
-```bash
-./test-team.sh --name "My Team" --primary "#FF0000" --secondary "#0000FF"
-```
+- **Authentication**: Setup with Amazon Cognito for secure user authentication.
+- **API**: Ready-to-use GraphQL endpoint with AWS AppSync.
+- **Database**: Real-time database powered by Amazon DynamoDB.
 
 ## Deploying to AWS
 

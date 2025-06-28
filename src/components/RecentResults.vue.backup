@@ -16,9 +16,9 @@
           <tr v-for="result in recentResults" :key="result.game_id">
             <td class="opponent-cell">
               <img
-                :src="result.opponent_logo_url || '/images/default-logo.png'"
+                src="/images/default-logo.png"
                 :alt="result.opponent_name + ' Logo'"
-                class="opponent-logo"
+                class="school-logo"
                 @error="(event: Event) => { 
                   const target = event.target as HTMLImageElement;
                   if (target) {
@@ -52,11 +52,17 @@ import { ref, onMounted, defineProps, watch } from 'vue';
 import { getRecentGames, getCurrentTeam, type Game } from '../services/api';
 import { themeColors } from '../services/theme';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, defineProps } from 'vue';
+import { getRecentGames, getCurrentTeam, type Game } from '../services/api';
+import { themeColors } from '../services/theme';
 
 const recentResults = ref<Game[]>([]);
 const loading = ref(true);
 const error = ref<Error | null>(null);
-const limit = 5;
+const limit = 10;
 
 // Receive subscribedTeams and primaryColor props
 const props = defineProps({
@@ -71,85 +77,58 @@ const props = defineProps({
   }
 });
 
-async function loadRecentResults() {
-  const context = createDebugContext('RecentResults', 'loadRecentResults', { subscribedTeams: props.subscribedTeams });
+onMounted(async () => {
+  loading.value = true;
+  error.value = null;
   
   try {
-    loading.value = true;
-    error.value = null;
-    
-    debug.info(context, `Loading recent results for teams: ${props.subscribedTeams.join(', ')}`);
-    
-    // Get current team (should match subscribed teams)
+    console.log('[RecentResults] Fetching recent games...');
     const currentTeam = getCurrentTeam();
-    const teamToFetch = props.subscribedTeams.includes(currentTeam) ? currentTeam : props.subscribedTeams[0];
+    console.log('[RecentResults] Current team:', currentTeam);
     
-    if (!teamToFetch) {
-      debug.warn(context, 'No team specified for recent results');
-      recentResults.value = [];
-      return;
-    }
-    
-    debug.info(context, `Fetching recent games for team: ${teamToFetch}`);
-    const games = await getRecentGames(teamToFetch);
+    // Get recent games from the new API
+    const games = await getRecentGames(currentTeam);
+    console.log('[RecentResults] Recent games:', games);
     
     recentResults.value = games.slice(0, limit);
-    debug.info(context, `Loaded ${recentResults.value.length} recent results`);
+    console.log('[RecentResults] Final recent results:', recentResults.value);
     
   } catch (err) {
-    handleComponentError(context, err);
-    error.value = err instanceof Error ? err : new Error('Failed to load recent results');
+    error.value = err as Error;
+    console.error('[RecentResults] Error fetching recent results:', err);
   } finally {
     loading.value = false;
+    console.log('[RecentResults] Loading complete, state:', { 
+      loading: loading.value,
+      error: error.value,
+      resultsCount: recentResults.value.length 
+    });
   }
-}
-
-onMounted(() => {
-  loadRecentResults();
 });
 
-// Watch for changes in subscribed teams
-watch(() => props.subscribedTeams, () => {
-  debug.info(createDebugContext('RecentResults', 'watch'), 'Subscribed teams changed, reloading results');
-  loadRecentResults();
-}, { deep: true });
-
 function formatDate(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  } catch {
-    return dateString;
-  }
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric' 
+  };
+  return new Date(dateString).toLocaleDateString('en-US', options);
 }
 
 function formatGameResult(game: Game): string {
-  if (!game.team_score || !game.opponent_score) {
-    return `${game.game_outcome || 'N/A'}`;
+  if (!game.game_outcome) return 'TBD';
+  
+  let result = game.game_outcome;
+  
+  // Add score if available
+  if (game.team_score !== undefined && game.opponent_score !== undefined) {
+    result += ` ${game.team_score}-${game.opponent_score}`;
   }
   
-  const teamScore = parseInt(game.team_score.toString());
-  const oppScore = parseInt(game.opponent_score.toString());
-  
-  if (isNaN(teamScore) || isNaN(oppScore)) {
-    return `${game.game_outcome || 'N/A'}`;
-  }
-  
-  const result = game.game_outcome === 'W' ? 'W' : 
-                 game.game_outcome === 'L' ? 'L' : 'T';
-  
-  return `${result} ${teamScore}-${oppScore}`;
+  return result;
 }
 
 function getLocationText(game: Game): string {
-  // Use game_location if available, otherwise fall back to home/away logic
-  if (game.game_location) {
-    return game.game_location;
-  }
   return game.home_away === 'Home' ? 'Home' : `@ ${game.opponent_name}`;
 }
 </script>
@@ -165,21 +144,16 @@ function getLocationText(game: Game): string {
   color: white;
 }
 
-.loading, .error {
-  text-align: center;
-  padding: 20px;
+.loading, .error, .no-results {
   color: white;
   font-family: 'Bebas Neue', sans-serif;
-}
-
-.error {
-  color: #ff6b6b;
+  font-size: 1.2em;
+  text-align: center;
+  padding: 2rem;
 }
 
 .results-table-container {
   overflow-x: auto;
-  width: 100%;
-  box-sizing: border-box;
   margin-top: 1rem;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -188,104 +162,88 @@ function getLocationText(game: Game): string {
 .results-table {
   width: 100%;
   border-collapse: collapse;
-  background-color: rgba(24, 43, 73, 0.9);
+  background-color: rgba(24, 43, 73, 0.7);
   color: white;
   border-radius: 8px;
-  font-size: 1em;
-  font-family: 'Bebas Neue', sans-serif;
-  box-sizing: border-box;
-  margin: 0 auto;
-  text-align: left;
   overflow: hidden;
+  min-width: 500px;
 }
 
-.results-table th, .results-table td {
-  padding: 16px;
+.results-table th,
+.results-table td {
+  padding: 12px;
   text-align: left;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 1.1em;
-  letter-spacing: 0.5px;
 }
 
 .results-table th {
-  font-weight: bold;
   color: white;
+  font-weight: 600;
   background-color: var(--primary-color, #182B49);
-  text-transform: uppercase;
-  font-size: 1em;
-}
-
-.results-table tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.results-table tr:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.results-table tr:last-child td {
-  border-bottom: none;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1px;
 }
 
 .opponent-cell {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  text-align: left !important;
+  gap: 0.5rem;
 }
 
-.opponent-logo {
-  width: 32px;
-  height: 32px;
+.school-logo {
+  width: 30px;
+  height: 30px;
   object-fit: contain;
-  background: transparent;
   border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px;
 }
 
 .opponent-name {
   font-weight: 500;
-  font-size: 1em;
 }
 
 .win {
-  color: var(--secondary-color, #4caf50);
-  font-weight: bold;
+  color: #4CAF50;
+  font-weight: 600;
 }
 
 .loss {
   color: #f44336;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .tie {
   color: #ff9800;
-  font-weight: bold;
-}
-
-.no-results {
-  color: white;
-  padding: 15px;
-  text-align: center;
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  margin: 15px auto;
-  max-width: 80%;
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {
+  .results-table th,
+  .results-table td {
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  .school-logo {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .opponent-name {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
   .results-table {
-    font-size: 0.8em;
+    min-width: 400px;
   }
   
-  .results-table th, .results-table td {
-    padding: 8px 4px;
-  }
-  
-  .opponent-cell {
-    flex-direction: column;
-    gap: 4px;
-    text-align: center !important;
+  .results-table th,
+  .results-table td {
+    padding: 6px;
+    font-size: 12px;
   }
   
   .school-logo {

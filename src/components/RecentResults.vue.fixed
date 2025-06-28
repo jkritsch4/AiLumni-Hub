@@ -16,9 +16,9 @@
           <tr v-for="result in recentResults" :key="result.game_id">
             <td class="opponent-cell">
               <img
-                :src="result.opponent_logo_url || '/images/default-logo.png'"
+                src="/images/default-logo.png"
                 :alt="result.opponent_name + ' Logo'"
-                class="opponent-logo"
+                class="school-logo"
                 @error="(event: Event) => { 
                   const target = event.target as HTMLImageElement;
                   if (target) {
@@ -56,7 +56,7 @@ import { debug, createDebugContext, handleComponentError } from '../utils/debug'
 const recentResults = ref<Game[]>([]);
 const loading = ref(true);
 const error = ref<Error | null>(null);
-const limit = 5;
+const limit = 10;
 
 // Receive subscribedTeams and primaryColor props
 const props = defineProps({
@@ -146,10 +146,6 @@ function formatGameResult(game: Game): string {
 }
 
 function getLocationText(game: Game): string {
-  // Use game_location if available, otherwise fall back to home/away logic
-  if (game.game_location) {
-    return game.game_location;
-  }
   return game.home_away === 'Home' ? 'Home' : `@ ${game.opponent_name}`;
 }
 </script>
@@ -188,35 +184,27 @@ function getLocationText(game: Game): string {
 .results-table {
   width: 100%;
   border-collapse: collapse;
-  background-color: rgba(24, 43, 73, 0.9);
+  background-color: rgba(24, 43, 73, 0.7);
   color: white;
   border-radius: 8px;
-  font-size: 1em;
-  font-family: 'Bebas Neue', sans-serif;
+  font-size: 0.9em;
+  font-family: 'Arial', sans-serif;
   box-sizing: border-box;
   margin: 0 auto;
-  text-align: left;
+  text-align: center;
   overflow: hidden;
 }
 
 .results-table th, .results-table td {
-  padding: 16px;
-  text-align: left;
+  padding: 12px;
+  text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 1.1em;
-  letter-spacing: 0.5px;
 }
 
 .results-table th {
   font-weight: bold;
   color: white;
   background-color: var(--primary-color, #182B49);
-  text-transform: uppercase;
-  font-size: 1em;
-}
-
-.results-table tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .results-table tr:hover {
@@ -231,25 +219,23 @@ function getLocationText(game: Game): string {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: 10px;
   text-align: left !important;
 }
 
-.opponent-logo {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  background: transparent;
-  border-radius: 4px;
+.school-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .opponent-name {
   font-weight: 500;
-  font-size: 1em;
 }
 
 .win {
-  color: var(--secondary-color, #4caf50);
+  color: #4caf50;
   font-weight: bold;
 }
 

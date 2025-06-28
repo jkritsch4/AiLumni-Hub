@@ -1,12 +1,13 @@
 <script setup>
-import { ref, onMounted, defineProps } from 'vue';
+import { ref, onMounted, defineProps, watch } from 'vue';
 import { themeColors } from '../services/theme';
+import { getStandings } from '../services/api';
+import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
-const standings = ref();
+const standings = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const conferenceFilter = ref('');
-const apiUrl = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events';
 
 const props = defineProps({
   subscribedTeams: {
@@ -24,77 +25,78 @@ const props = defineProps({
   }
 });
 
-onMounted(async () => {
-  console.log("Selected Sport Prop in Standings:", props.selectedSport);
-  console.log("Subscribed Teams in Standings:", props.subscribedTeams);
+async function loadStandings() {
+  const context = createDebugContext('Standings', 'loadStandings', { selectedSport: props.selectedSport });
+  
   loading.value = true;
   error.value = null;
+  
   try {
-    // Check if we're in test mode
-    const isTestMode = import.meta.env.VITE_TEST_MODE === 'true';
-    let teamStandings = [];
-    let data = [];
+    debug.info(context, `Loading standings for sport: ${props.selectedSport}`);
+    const standingsData = await getStandings(props.selectedSport);
+    debug.info(context, `Retrieved ${standingsData.length} standings records`);
     
-    // If in test mode, directly use the conference from environment variable
-    if (isTestMode && import.meta.env.VITE_TEAM_CONFERENCE) {
-      conferenceFilter.value = import.meta.env.VITE_TEAM_CONFERENCE;
-      console.log(`[Standings] Test mode active, using conference: ${conferenceFilter.value}`);
+    if (standingsData.length === 0) {
+      standings.value = [];
+      conferenceFilter.value = '';
+      debug.warn(context, 'No standings data found');
+      return;
     }
     
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    data = await response.json();
-    console.log("[Standings] API Response Data:", data);
-    teamStandings = data.filter(item => item.dataType === 'standings');
-    console.log("[Standings] Filtered Standings Data (dataType=standings):", teamStandings);
-    teamStandings = teamStandings.filter(team => team.sport === props.selectedSport);
-    console.log("[Standings] Standings after Sport Filter:", teamStandings);
-    
-    // If not in test mode or no conference specified in env, try to get it from data
-    if (!isTestMode || !conferenceFilter.value) {
-      // Find the team data for the current team to get the conference from standing_type
-      const currentTeamData = data.find(item => 
-        props.subscribedTeams.includes(item.team_name) && 
-        item.sport === props.selectedSport
+    // Find the conference for the user's subscribed teams
+    let userConference = '';
+    for (const team of props.subscribedTeams) {
+      const teamStanding = standingsData.find(standing => 
+        isUserTeam(standing.team_name, team)
       );
-      
-      if (currentTeamData?.standing_type) {
-        conferenceFilter.value = currentTeamData.standing_type;
-        console.log(`[Standings] Found conference name for ${currentTeamData.team_name}: ${conferenceFilter.value}`);
-      } else {
-        // If no standing_type found, try to get any conference from standings data
-        const anyConference = teamStandings.length > 0 ? teamStandings[0].standing_type : 'Big West Conference';
-        conferenceFilter.value = anyConference;
-        console.log(`[Standings] Using default conference name: ${conferenceFilter.value}`);
+      if (teamStanding) {
+        userConference = teamStanding.standing_type;
+        debug.info(context, `Found user conference: ${userConference} for team: ${team}`);
+        break;
       }
     }
     
-    teamStandings = teamStandings.filter(team => team.standing_type === conferenceFilter.value);
-    console.log(`Standings after Conference Filter (${conferenceFilter.value}):`, teamStandings);
-    if (teamStandings.length > 0) {
-      teamStandings.sort((a, b) => {
-        const winsA = parseInt(a.conf_wins);
-        const lossesA = parseInt(a.conf_losses);
-        const winsB = parseInt(b.conf_wins);
-        const lossesB = parseInt(b.conf_losses);
+    // If no user conference found, use the first available conference
+    if (!userConference && standingsData.length > 0) {
+      userConference = standingsData[0].standing_type;
+      debug.info(context, `Using default conference: ${userConference}`);
+    }
+    
+    conferenceFilter.value = userConference;
+    
+    // Filter by conference and sort by wins
+    const conferenceStandings = standingsData
+      .filter(team => team.standing_type === userConference)
+      .sort((a, b) => {
+        const winsA = parseInt(a.conf_wins) || 0;
+        const lossesA = parseInt(a.conf_losses) || 0;
+        const winsB = parseInt(b.conf_wins) || 0;
+        const lossesB = parseInt(b.conf_losses) || 0;
+        
         if (winsB !== winsA) {
-          return winsB - winsA;
+          return winsB - winsA; // Sort by wins descending
         } else {
-          return lossesA - lossesB;
+          return lossesA - lossesB; // Then by losses ascending
         }
       });
-      standings.value = teamStandings;
-    } else {
-      standings.value = [];
-    }
+    
+    standings.value = conferenceStandings;
+    debug.info(context, `Loaded ${conferenceStandings.length} standings for conference: ${userConference}`);
   } catch (err) {
-    error.value = err;
-    console.error("Error fetching standings:", err);
+    handleComponentError(context, err);
+    standings.value = [];
   } finally {
     loading.value = false;
   }
+}
+
+onMounted(() => {
+  loadStandings();
+});
+
+// Watch for sport changes and reload standings
+watch(() => props.selectedSport, () => {
+  loadStandings();
 });
 
 function calculatePercentage(wins, losses) {
@@ -103,41 +105,59 @@ function calculatePercentage(wins, losses) {
   return (wins / totalGames).toFixed(3).substring(1);
 }
 
-// Helper function to match user's subscribed team with the standings data
-// This handles different naming formats between subscribed teams and standings data
-function isUserTeam(teamName) {
-  // Direct match - if the team name is exactly in the subscribedTeams array
-  if (props.subscribedTeams.includes(teamName)) {
+// Helper function to check if a team is the user's subscribed team
+function isUserTeam(standingTeamName, subscribedTeam = null) {
+  // If specific subscribedTeam is provided, check against it
+  if (subscribedTeam) {
+    return isTeamMatch(standingTeamName, subscribedTeam);
+  }
+  
+  // Otherwise check against all subscribed teams
+  return props.subscribedTeams.some(team => isTeamMatch(standingTeamName, team));
+}
+
+// Helper function to match team names with various formats
+function isTeamMatch(standingTeamName, subscribedTeam) {
+  // Direct match
+  if (standingTeamName === subscribedTeam) {
     return true;
   }
   
-  // Check for alternative formats of the same team name
-  for (const subscribedTeam of props.subscribedTeams) {
-    // Special case for USD/San Diego
-    if ((subscribedTeam.includes('USD') || subscribedTeam.toLowerCase().includes('san diego')) && 
-        (teamName === 'San Diego' || teamName.includes('USD'))) {
-      console.log(`[Standings] Matched USD team: "${subscribedTeam}" with "${teamName}"`);
+  // Case insensitive match
+  if (standingTeamName.toLowerCase() === subscribedTeam.toLowerCase()) {
+    return true;
+  }
+  
+  // Handle common variations
+  const variations = [
+    // UCSD variations
+    { patterns: ['UCSD', 'UC San Diego'], match: ['UCSD', 'UC San Diego', 'University of California San Diego'] },
+    // UCLA variations  
+    { patterns: ['UCLA'], match: ['UCLA', 'University of California Los Angeles'] },
+    // USC variations
+    { patterns: ['USC'], match: ['USC', 'University of Southern California'] }
+  ];
+  
+  for (const variation of variations) {
+    const standingMatches = variation.match.some(pattern => 
+      standingTeamName.toLowerCase().includes(pattern.toLowerCase())
+    );
+    const subscribedMatches = variation.patterns.some(pattern =>
+      subscribedTeam.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    if (standingMatches && subscribedMatches) {
       return true;
     }
-    
-    // Case 1: "UCSD Baseball" vs "UC San Diego"
-    if (subscribedTeam.includes('UCSD') && teamName.includes('UC San Diego')) {
+  }
+  
+  // Check if main words match (for cases like "UCSD Baseball" vs "UC San Diego")
+  const standingWords = standingTeamName.toLowerCase().split(' ');
+  const subscribedWords = subscribedTeam.toLowerCase().split(' ');
+  
+  for (const word of subscribedWords) {
+    if (word.length > 2 && standingWords.some(sw => sw.includes(word))) {
       return true;
-    }
-    
-    // Case 2: Check if the main part of the name matches (e.g., "UCLA" in "UCLA Basketball")
-    const subscribedMainName = subscribedTeam.split(' ')[0]; // Get first part of name
-    if (teamName.includes(subscribedMainName)) {
-      return true;
-    }
-    
-    // Case 3: Handle abbreviations vs full names
-    // Check if the team name contains any word from subscribedTeam
-    const subscribedWords = subscribedTeam.split(' ');
-    for (const word of subscribedWords) {
-      if (word.length > 2 && teamName.includes(word)) { // Only check words with 3+ chars
-        return true;
-      }
     }
   }
   
@@ -147,12 +167,8 @@ function isUserTeam(teamName) {
 
 <template>
   <div class="standings-section">
-    <div v-if="loading" class="loading-container">
-      <div class="modern-loader">
-        <div class="dot"></div>
-        <div class="dot"></div>
-        <div class="dot"></div>
-      </div>
+    <div v-if="loading" class="loading-spinner">
+      <div class="spinner"></div>
       <p>Loading standings...</p>
     </div>
     <div v-if="error">Error loading standings: {{ error.message }}</div>
@@ -184,7 +200,7 @@ function isUserTeam(teamName) {
       </div>
     </transition>
     <p v-if="!loading && !error && standings.length === 0" class="no-data-message">
-      No standings data found for {{ props.selectedSport }} in the {{ conferenceFilter.value || 'division' }}.
+      No standings data found for {{ props.selectedSport }}{{ conferenceFilter ? ` in the ${conferenceFilter}` : '' }}.
     </p>
   </div>
 </template>
@@ -282,47 +298,23 @@ function isUserTeam(teamName) {
 .fade-leave-from {
   opacity: 1;
 }
-.loading-container {
+.loading-spinner {
   display: flex;
   flex-direction: column;
   align-items: center;
   color: white;
   font-family: 'Bebas Neue', sans-serif;
   font-size: 1.2em;
-  margin-top: 30px;
-  margin-bottom: 30px;
+  margin-top: 20px;
 }
-
-.modern-loader {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-.dot {
-  width: 12px;
-  height: 12px;
+.spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
   border-radius: 50%;
-  background-color: white;
-  opacity: 0.7;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.dot:nth-child(1) {
-  animation-delay: -0.32s;
-  background-color: var(--secondary-color, #FFCD00);
-}
-
-.dot:nth-child(2) {
-  animation-delay: -0.16s;
-  background-color: white;
-}
-
-.dot:nth-child(3) {
-  animation-delay: 0s;
-  background-color: var(--primary-color, #182B49);
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
 }
 .highlight-row {
   background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15); /* Secondary color with transparency */
@@ -344,14 +336,8 @@ function isUserTeam(teamName) {
   margin: 15px auto;
   max-width: 80%;
 }
-@keyframes pulse {
-  0%, 80%, 100% { 
-    transform: scale(0.6);
-    opacity: 0.6;
-  }
-  40% { 
-    transform: scale(1.2);
-    opacity: 1;
-  }
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

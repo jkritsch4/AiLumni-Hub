@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, defineProps, watch } from 'vue';
 import { themeColors } from '../services/theme';
-import { getStandings } from '../services/api';
+import { getStandings, getCurrentTeam, getTeamInfo } from '../services/api';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 const standings = ref([]);
@@ -43,16 +43,28 @@ async function loadStandings() {
       return;
     }
     
-    // Find the conference for the user's subscribed teams
+    // Prefer explicit conference from current team info
     let userConference = '';
-    for (const team of props.subscribedTeams) {
-      const teamStanding = standingsData.find(standing => 
-        isUserTeam(standing.team_name, team)
-      );
-      if (teamStanding) {
-        userConference = teamStanding.standing_type;
-        debug.info(context, `Found user conference: ${userConference} for team: ${team}`);
-        break;
+    try {
+      const currentTeam = getCurrentTeam();
+      const info = await getTeamInfo(currentTeam);
+      if (info?.conference) {
+        userConference = info.conference;
+        debug.info(context, `Using explicit team conference: ${userConference}`);
+      }
+    } catch {}
+
+    // Fallback to existing inference by matching subscribedTeams
+    if (!userConference) {
+      for (const team of props.subscribedTeams) {
+        const teamStanding = standingsData.find(standing => 
+          isUserTeam(standing.team_name, team)
+        );
+        if (teamStanding) {
+          userConference = teamStanding.standing_type;
+          debug.info(context, `Inferred user conference: ${userConference} for team: ${team}`);
+          break;
+        }
       }
     }
     

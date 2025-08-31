@@ -135,6 +135,18 @@ window.runCompleteValidation = runCompleteValidation;
 window.quickCheck = quickCheck;
 window.EXPECTED_TEAMS = EXPECTED_TEAMS;
 
+// Make available teams for quick testing
+if (typeof window !== 'undefined') {
+  window.availableTeams = Array.from(new Set([
+    'UCSD Baseball', 
+    "UCSD Men's Basketball", 
+    'SF State Baseball', 
+    'USD Baseball', 
+    'USF Basketball',
+    'Cal Poly Pomona Baseball'
+  ]));
+}
+
 console.log('\n📋 Available Commands:');
 console.log('• quickCheck() - Check current team logo');
 console.log('• validateTeamLogo("UCSD Baseball") - Test specific team');

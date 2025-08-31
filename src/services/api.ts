@@ -1,5 +1,6 @@
 // Real AWS API Data Types based on the provided JSON structure
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
+import { TEAM_ID_TO_NAME, TEAM_NAME_TO_ID, getOverridesForTeam, slugifyTeamName } from '../config/team-aliases';
 
 // Log successful API service initialization
 debug.info(createDebugContext('API', 'initialization'), 'API service loaded successfully with all exports');
@@ -10,6 +11,7 @@ export interface TeamInfo {
   primaryThemeColor: string;
   secondaryThemeColor: string;
   sport: string;
+  conference?: string; // NEW optional
 }
 
 export interface Game {
@@ -55,19 +57,6 @@ let currentSelectedTeam = 'UCSD Baseball';
 let apiDataCache: APIResponse | null = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-// Team ID to team name mapping for URL parameters
-const TEAM_ID_MAPPING: Record<string, string> = {
-  'sf-state': 'SF State Baseball',
-  'chico-state': 'Chico State Baseball', 
-  'cal-poly-pomona': 'Cal Poly Pomona Baseball',
-  'ucsd': 'UCSD Baseball'
-};
-
-// Reverse mapping for team name to team ID
-const TEAM_NAME_TO_ID: Record<string, string> = Object.fromEntries(
-  Object.entries(TEAM_ID_MAPPING).map(([id, name]) => [name, id])
-);
 
 // Fallback data for development
 const FALLBACK_TEAM_INFO: TeamInfo[] = [
@@ -250,14 +239,27 @@ export const setCurrentTeam = (teamName: string): void => {
  * Convert team ID to team name
  */
 export const getTeamNameFromId = (teamId: string): string => {
-  return TEAM_ID_MAPPING[teamId.toLowerCase()] || teamId;
+  const normalized = teamId.toLowerCase();
+  if (TEAM_ID_TO_NAME[normalized]) return TEAM_ID_TO_NAME[normalized];
+  
+  // Fallback: try slug match against known team names from cached data
+  try {
+    if (apiDataCache?.TeamInfo?.length) {
+      const match = apiDataCache.TeamInfo.find(t => slugifyTeamName(t.team_name) === normalized);
+      if (match) return match.team_name;
+    }
+  } catch (e) {
+    console.warn('[API] Error during slug match for team id:', teamId, e);
+  }
+  console.warn('[API] Unknown team_id, using raw id as name (may not match TeamInfo):', teamId);
+  return teamId;
 };
 
 /**
  * Convert team name to team ID
  */
 export const getTeamIdFromName = (teamName: string): string => {
-  return TEAM_NAME_TO_ID[teamName] || teamName.toLowerCase().replace(/\s+/g, '-');
+  return TEAM_NAME_TO_ID[teamName] || slugifyTeamName(teamName);
 };
 
 /**
@@ -279,14 +281,28 @@ export const getTeamInfo = async (teamName?: string): Promise<TeamInfo | null> =
     debug.info(context, `Fetching team info for: ${targetTeam}`);
     
     const data = await fetchAPIData();
-    const teamInfo = data.TeamInfo.find(team => team.team_name === targetTeam);
+    let teamInfo = data.TeamInfo.find(team => team.team_name === targetTeam) || null;
     
     if (!teamInfo) {
       debug.warn(context, `Team info not found for: ${targetTeam}, using fallback`);
-      return FALLBACK_TEAM_INFO.find(team => team.team_name === targetTeam) || FALLBACK_TEAM_INFO[0];
+      teamInfo = FALLBACK_TEAM_INFO.find(team => team.team_name === targetTeam) || FALLBACK_TEAM_INFO[0] || null;
     }
-    
-    debug.info(context, `Successfully found team info for: ${targetTeam}`, teamInfo);
+
+    if (teamInfo) {
+      const overrides = getOverridesForTeam(teamInfo.team_name);
+      if (overrides?.colors) {
+        teamInfo = {
+          ...teamInfo,
+          primaryThemeColor: teamInfo.primaryThemeColor || overrides.colors.primary,
+          secondaryThemeColor: teamInfo.secondaryThemeColor || overrides.colors.secondary,
+        };
+      }
+      if (overrides?.conference && !teamInfo.conference) {
+        teamInfo = { ...teamInfo, conference: overrides.conference };
+      }
+      debug.info(context, `Successfully found team info for: ${targetTeam}`, teamInfo);
+    }
+
     return teamInfo;
   } catch (error) {
     handleComponentError(context, error);

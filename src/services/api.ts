@@ -80,6 +80,27 @@ const FALLBACK_TEAM_INFO: TeamInfo[] = [
     primaryThemeColor: '#182B49',
     secondaryThemeColor: '#FFCD00',
     sport: 'Golf'
+  },
+  {
+    team_name: 'USF Basketball',
+    team_logo_url: 'https://usfdons.com/images/logos/site/site.png',
+    primaryThemeColor: '',
+    secondaryThemeColor: '',
+    sport: 'Basketball'
+  },
+  {
+    team_name: 'USD Baseball',
+    team_logo_url: 'https://usdtoreros.com/images/logos/site/site.png',
+    primaryThemeColor: '',
+    secondaryThemeColor: '',
+    sport: 'Baseball'
+  },
+  {
+    team_name: 'SF State Baseball',
+    team_logo_url: 'https://sfstategators.com/images/logos/site/site.png',
+    primaryThemeColor: '',
+    secondaryThemeColor: '',
+    sport: 'Baseball'
   }
 ];
 

@@ -56,6 +56,19 @@ let apiDataCache: APIResponse | null = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Team ID to team name mapping for URL parameters
+const TEAM_ID_MAPPING: Record<string, string> = {
+  'sf-state': 'SF State Baseball',
+  'chico-state': 'Chico State Baseball', 
+  'cal-poly-pomona': 'Cal Poly Pomona Baseball',
+  'ucsd': 'UCSD Baseball'
+};
+
+// Reverse mapping for team name to team ID
+const TEAM_NAME_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(TEAM_ID_MAPPING).map(([id, name]) => [name, id])
+);
+
 // Fallback data for development
 const FALLBACK_TEAM_INFO: TeamInfo[] = [
   {
@@ -231,6 +244,28 @@ export const getCurrentTeam = (): string => {
 export const setCurrentTeam = (teamName: string): void => {
   currentSelectedTeam = teamName;
   console.debug('[API] Current team set to:', teamName);
+};
+
+/**
+ * Convert team ID to team name
+ */
+export const getTeamNameFromId = (teamId: string): string => {
+  return TEAM_ID_MAPPING[teamId.toLowerCase()] || teamId;
+};
+
+/**
+ * Convert team name to team ID
+ */
+export const getTeamIdFromName = (teamName: string): string => {
+  return TEAM_NAME_TO_ID[teamName] || teamName.toLowerCase().replace(/\s+/g, '-');
+};
+
+/**
+ * Set current team by team ID (for URL parameters)
+ */
+export const setCurrentTeamById = (teamId: string): void => {
+  const teamName = getTeamNameFromId(teamId);
+  setCurrentTeam(teamName);
 };
 
 /**

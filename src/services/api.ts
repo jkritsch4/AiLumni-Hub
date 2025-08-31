@@ -56,7 +56,7 @@ let apiDataCache: APIResponse | null = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Team ID to team name mapping for URL parameters
+// Team ID to team name mapping for URL parameters (convenience only - dynamic resolution available)
 const TEAM_ID_MAPPING: Record<string, string> = {
   'sf-state': 'SF State Baseball',
   'chico-state': 'Chico State Baseball', 
@@ -124,11 +124,14 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
     const standingsData: Standing[] = [];
     
     for (const item of rawData) {
-      // Check if this item has team info (team_logo_url indicates team info)
-      if (item.team_logo_url && item.team_name) {
+      // Check if this item has team info - support both legacy format and TeamInfo records
+      const isLegacyTeamInfo = item.team_logo_url && item.team_name;
+      const isCanonicalTeamInfo = (item.dataType === 'TeamInfo' || item.SK === 'TeamInfo') && item.PK;
+      
+      if (isLegacyTeamInfo || isCanonicalTeamInfo) {
         const teamInfo: TeamInfo = {
-          team_name: item.team_name,
-          team_logo_url: item.team_logo_url,
+          team_name: item.team_name || item.PK, // Use PK as team_name for canonical TeamInfo records
+          team_logo_url: item.team_logo_url || '/images/default-logo.png',
           primaryThemeColor: item.primaryThemeColor || '#182B49',
           secondaryThemeColor: item.secondaryThemeColor || '#FFCD00',
           sport: item.sport || 'Baseball'
@@ -194,7 +197,7 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
           conf_losses: item.conf_losses,
           overall_wins: item.overall_wins,
           overall_losses: item.overall_losses,
-          standing_type: item.standing_type,
+          standing_type: item.standing_type || item.SK, // Fallback to SK when standing_type is missing
           streak: item.streak
         };
         standingsData.push(standing);
@@ -247,10 +250,71 @@ export const setCurrentTeam = (teamName: string): void => {
 };
 
 /**
- * Convert team ID to team name
+ * Convert team ID to team name with dynamic resolution
  */
-export const getTeamNameFromId = (teamId: string): string => {
+export const getTeamNameFromId = async (teamId: string): Promise<string> => {
+  // First try the static mapping for convenience
+  const staticMatch = TEAM_ID_MAPPING[teamId.toLowerCase()];
+  if (staticMatch) {
+    return staticMatch;
+  }
+  
+  // If no static match, try dynamic resolution from API data
+  try {
+    const data = await fetchAPIData();
+    const normalizedTeamId = teamId.toLowerCase().replace(/[-_]/g, ' ');
+    
+    // Try exact match first
+    let match = data.TeamInfo.find(team => 
+      team.team_name.toLowerCase() === normalizedTeamId
+    );
+    
+    // Try case-insensitive partial match
+    if (!match) {
+      match = data.TeamInfo.find(team => 
+        team.team_name.toLowerCase().includes(normalizedTeamId) ||
+        normalizedTeamId.includes(team.team_name.toLowerCase())
+      );
+    }
+    
+    // Try slug-style matching (e.g., "usd-baseball" => "USD Baseball")
+    if (!match) {
+      const slugToName = teamId.split('-').map(word => 
+        word.toUpperCase()
+      ).join(' ');
+      
+      match = data.TeamInfo.find(team => 
+        team.team_name.toLowerCase().includes(slugToName.toLowerCase()) ||
+        slugToName.toLowerCase().includes(team.team_name.toLowerCase())
+      );
+    }
+    
+    return match ? match.team_name : teamId;
+  } catch (error) {
+    console.warn('[API] Error in dynamic team resolution:', error);
+    return teamId;
+  }
+};
+
+/**
+ * Synchronous team ID to team name conversion (legacy compatibility)
+ * Only works with static mapping, use async version for dynamic resolution
+ */
+export const getTeamNameFromIdSync = (teamId: string): string => {
   return TEAM_ID_MAPPING[teamId.toLowerCase()] || teamId;
+};
+
+/**
+ * Get all available team names from API for debugging
+ */
+export const getAllAvailableTeamNames = async (): Promise<string[]> => {
+  try {
+    const data = await fetchAPIData();
+    return data.TeamInfo.map(team => team.team_name).sort();
+  } catch (error) {
+    console.warn('[API] Error fetching available teams:', error);
+    return Object.values(TEAM_ID_MAPPING);
+  }
 };
 
 /**
@@ -261,10 +325,10 @@ export const getTeamIdFromName = (teamName: string): string => {
 };
 
 /**
- * Set current team by team ID (for URL parameters)
+ * Set current team by team ID (for URL parameters) with dynamic resolution
  */
-export const setCurrentTeamById = (teamId: string): void => {
-  const teamName = getTeamNameFromId(teamId);
+export const setCurrentTeamById = async (teamId: string): Promise<void> => {
+  const teamName = await getTeamNameFromId(teamId);
   setCurrentTeam(teamName);
 };
 

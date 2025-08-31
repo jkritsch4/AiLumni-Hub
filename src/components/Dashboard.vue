@@ -79,7 +79,7 @@ onMounted(async () => {
     let currentTeam = getCurrentTeam();
     if (teamId) {
       debug.info(context, `Setting team from URL parameter: ${teamId}`);
-      setCurrentTeamById(teamId);
+      await setCurrentTeamById(teamId);
       currentTeam = getCurrentTeam();
     }
     debug.info(context, `Current team: ${currentTeam}`);
@@ -135,7 +135,7 @@ watch(() => route?.query || getUrlParams(), async (newQuery) => {
       isLoading.value = true;
       
       // Set new team
-      setCurrentTeamById(teamId);
+      await setCurrentTeamById(teamId);
       const currentTeam = getCurrentTeam();
       
       // Load new team info

@@ -50,6 +50,15 @@ export interface APIResponse {
 // AWS API Configuration
 const API_ENDPOINT = 'https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events';
 
+// Helper functions for dynamic team matching
+const toSlug = (s: string): string => {
+  return s.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+};
+
+const equalsCI = (a: string, b: string): boolean => {
+  return a.toLowerCase() === b.toLowerCase();
+};
+
 // Global state for current team and cached data
 let currentSelectedTeam = 'UCSD Baseball';
 let apiDataCache: APIResponse | null = null;
@@ -124,8 +133,29 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
     const standingsData: Standing[] = [];
     
     for (const item of rawData) {
-      // Check if this item has team info (team_logo_url indicates team info)
-      if (item.team_logo_url && item.team_name) {
+      // Parse TeamInfo: check for dataType/SK = "TeamInfo" first, then fallback to legacy path
+      const isTeamInfoRow = (item.dataType && equalsCI(item.dataType, 'TeamInfo')) || 
+                           (item.SK && equalsCI(item.SK, 'TeamInfo'));
+      
+      if (isTeamInfoRow) {
+        // Use PK for team_name if team_name is absent
+        const teamName = item.team_name || item.PK;
+        if (teamName) {
+          const teamInfo: TeamInfo = {
+            team_name: teamName,
+            team_logo_url: item.team_logo_url || '/images/default-logo.png',
+            primaryThemeColor: item.primaryThemeColor || '#182B49',
+            secondaryThemeColor: item.secondaryThemeColor || '#FFCD00',
+            sport: item.sport || 'Baseball'
+          };
+          // Avoid duplicates
+          if (!teamInfoData.find(t => t.team_name === teamInfo.team_name && t.sport === teamInfo.sport)) {
+            teamInfoData.push(teamInfo);
+          }
+        }
+      }
+      // Keep secondary path: infer TeamInfo from any item that has team_name + team_logo_url
+      else if (item.team_logo_url && item.team_name) {
         const teamInfo: TeamInfo = {
           team_name: item.team_name,
           team_logo_url: item.team_logo_url,
@@ -159,6 +189,27 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
             parsedDate: new Date(item.start_time_utc).toLocaleDateString()
           });
         }
+
+        // Normalize game outcome: map strings like "W 6-0" to 'W', 'L', 'T', null
+        let normalizedOutcome: 'W' | 'L' | 'T' | null = null;
+        if (item.game_outcome) {
+          const outcomeStr = item.game_outcome.toString().trim().toUpperCase();
+          if (outcomeStr === 'PENDING') {
+            normalizedOutcome = null;
+          } else if (outcomeStr.startsWith('W')) {
+            normalizedOutcome = 'W';
+          } else if (outcomeStr.startsWith('L')) {
+            normalizedOutcome = 'L';
+          } else if (outcomeStr.startsWith('T')) {
+            normalizedOutcome = 'T';
+          }
+        }
+
+        // Normalize sport: if it contains "Baseball", set to "Baseball", otherwise keep as-is
+        let normalizedSport = item.sport || 'Baseball';
+        if (normalizedSport.toLowerCase().includes('baseball')) {
+          normalizedSport = 'Baseball';
+        }
         
         const game: Game = {
           game_id: item.game_id || `${item.team_name}-${item.start_time_utc}-${item.opponent_name}`,
@@ -167,9 +218,9 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
           game_date: item.start_time_utc, // Map from start_time_utc
           team_score: item.score_team,
           opponent_score: item.score_opponent,
-          game_outcome: item.game_outcome === 'Pending' ? null : item.game_outcome,
+          game_outcome: normalizedOutcome,
           home_away: item.game_location && item.game_location.toLowerCase().includes('ucsd') ? 'Home' : 'Away',
-          sport: item.sport || 'Baseball',
+          sport: normalizedSport,
           game_location: item.game_location,
           opponent_logo_url: item.opponent_logo_url
         };
@@ -250,7 +301,25 @@ export const setCurrentTeam = (teamName: string): void => {
  * Convert team ID to team name
  */
 export const getTeamNameFromId = (teamId: string): string => {
-  return TEAM_ID_MAPPING[teamId.toLowerCase()] || teamId;
+  // First try legacy mapping
+  const legacyMatch = TEAM_ID_MAPPING[teamId.toLowerCase()];
+  if (legacyMatch) {
+    return legacyMatch;
+  }
+  
+  // Then try slug matching against cached TeamInfo if available
+  if (apiDataCache?.TeamInfo) {
+    const teamSlug = toSlug(teamId);
+    const matchedTeam = apiDataCache.TeamInfo.find(team => 
+      toSlug(team.team_name) === teamSlug
+    );
+    if (matchedTeam) {
+      return matchedTeam.team_name;
+    }
+  }
+  
+  // Return raw input as fallback
+  return teamId;
 };
 
 /**
@@ -279,7 +348,20 @@ export const getTeamInfo = async (teamName?: string): Promise<TeamInfo | null> =
     debug.info(context, `Fetching team info for: ${targetTeam}`);
     
     const data = await fetchAPIData();
-    const teamInfo = data.TeamInfo.find(team => team.team_name === targetTeam);
+    
+    // Try exact match first
+    let teamInfo = data.TeamInfo.find(team => team.team_name === targetTeam);
+    
+    // Try case-insensitive match
+    if (!teamInfo) {
+      teamInfo = data.TeamInfo.find(team => equalsCI(team.team_name, targetTeam));
+    }
+    
+    // Try slug match
+    if (!teamInfo) {
+      const targetSlug = toSlug(targetTeam);
+      teamInfo = data.TeamInfo.find(team => toSlug(team.team_name) === targetSlug);
+    }
     
     if (!teamInfo) {
       debug.warn(context, `Team info not found for: ${targetTeam}, using fallback`);
@@ -329,9 +411,16 @@ export const getUpcomingGames = async (teamName?: string): Promise<Game[]> => {
       return [];
     }
     
-    // Filter games where game_outcome is null or 'Pending' (upcoming) and team matches
+    // Filter games where game_outcome is null (upcoming) and team matches using flexible matching
     const upcomingGames = data.Games
-      .filter(game => game && game.team_name === targetTeam && (game.game_outcome === null || game.game_outcome === 'Pending'))
+      .filter(game => {
+        if (!game || game.game_outcome !== null) return false;
+        
+        // Try exact, case-insensitive, and slug match
+        return game.team_name === targetTeam ||
+               equalsCI(game.team_name, targetTeam) ||
+               toSlug(game.team_name) === toSlug(targetTeam);
+      })
       .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime());
     
     debug.info(context, `Found ${upcomingGames.length} upcoming games for: ${targetTeam}`);
@@ -360,9 +449,16 @@ export const getRecentGames = async (teamName?: string): Promise<Game[]> => {
       return [];
     }
     
-    // Filter games where game_outcome is not null/Pending (completed) and team matches
+    // Filter games where game_outcome is not null (completed) and team matches using flexible matching
     const recentGames = data.Games
-      .filter(game => game && game.team_name === targetTeam && game.game_outcome && game.game_outcome !== 'Pending')
+      .filter(game => {
+        if (!game || game.game_outcome === null) return false;
+        
+        // Try exact, case-insensitive, and slug match
+        return game.team_name === targetTeam ||
+               equalsCI(game.team_name, targetTeam) ||
+               toSlug(game.team_name) === toSlug(targetTeam);
+      })
       .sort((a, b) => new Date(b.game_date).getTime() - new Date(a.game_date).getTime())
       .slice(0, 10); // Get last 10 games
     

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, reactive, onMounted, computed, watch, inject } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
@@ -24,8 +23,20 @@ const props = defineProps({
   }
 });
 
-// Get route for URL parameters
-const route = useRoute();
+// Try to get route, but handle gracefully if not available
+const route = inject('$route', null) as any;
+
+// Function to get URL parameters manually if route is not available
+const getUrlParams = () => {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    return {
+      team_id: urlParams.get('team_id'),
+      sport: urlParams.get('sport')
+    };
+  }
+  return { team_id: null, sport: null };
+};
 
 // State management
 const isLoading = ref(true);
@@ -54,8 +65,9 @@ onMounted(async () => {
     debug.info(context, 'Starting Dashboard initialization');
     
     // Read URL parameters for team_id and sport
-    const teamId = route.query.team_id as string;
-    const sport = route.query.sport as string;
+    const urlParams = route?.query || getUrlParams();
+    const teamId = urlParams.team_id as string;
+    const sport = urlParams.sport as string;
     
     debug.info(context, 'URL Parameters:', { teamId, sport });
     
@@ -111,7 +123,7 @@ watch(() => themeColors, (newColors) => {
 }, { deep: true });
 
 // Watch for route changes to handle URL parameter updates
-watch(() => route.query, async (newQuery) => {
+watch(() => route?.query || getUrlParams(), async (newQuery) => {
   const context = createDebugContext('Dashboard', 'routeWatch');
   debug.info(context, 'Route query changed', newQuery);
   

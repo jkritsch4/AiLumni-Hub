@@ -181,7 +181,6 @@ function getLocationText(game: Game): string {
   color: white;
   font-family: 'Bebas Neue', sans-serif;
 }
-
 .error { color: #ff6b6b; }
 
 .results-table-container {
@@ -193,10 +192,11 @@ function getLocationText(game: Game): string {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Table uses transparent background; rows will carry the tinted surface */
 .results-table {
   width: 100%;
   border-collapse: collapse;
-  background-color: rgba(24, 43, 73, 0.9);
+  background-color: transparent;
   color: white;
   border-radius: 8px;
   font-size: 1em;
@@ -207,14 +207,15 @@ function getLocationText(game: Game): string {
   overflow: hidden;
 }
 
-.results-table th, .results-table td {
+/* Header stays as-is (bound to primaryColor prop) */
+.results-table th,
+.results-table td {
   padding: 16px;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 1.1em;
   letter-spacing: 0.5px;
 }
-
 .results-table th {
   font-weight: bold;
   color: white;
@@ -223,8 +224,14 @@ function getLocationText(game: Game): string {
   font-size: 1em;
 }
 
-.results-table tr { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-.results-table tr:hover { background-color: rgba(255, 255, 255, 0.05); }
+/* Data rows: darker translucent hue of the primary color */
+.results-table tbody tr {
+  background-color: rgba(var(--primary-color-rgb, 24, 43, 73), 0.35);
+  transition: background-color 0.2s ease;
+}
+.results-table tbody tr:hover {
+  background-color: rgba(var(--primary-color-rgb, 24, 43, 73), 0.45);
+}
 .results-table tr:last-child td { border-bottom: none; }
 
 .opponent-cell {
@@ -234,7 +241,6 @@ function getLocationText(game: Game): string {
   gap: 12px;
   text-align: left !important;
 }
-
 .opponent-logo {
   width: 32px;
   height: 32px;
@@ -242,7 +248,6 @@ function getLocationText(game: Game): string {
   background: transparent;
   border-radius: 4px;
 }
-
 .opponent-name { font-weight: 500; font-size: 1em; }
 
 .no-results {

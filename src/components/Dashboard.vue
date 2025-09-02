@@ -29,7 +29,7 @@ const currentTeamInfo = ref<TeamInfo | null>(null);
 const allTeams = ref<TeamInfo[]>([]);
 const homeTeamLogo = ref(props.homeTeamLogo || '/images/default-logo.png');
 const userPreferences = reactive({
-  selectedSport: 'Baseball',
+  selectedSport: 'Basketball',
   notificationPreferences: [],
   receiveDailyDashboardLink: false
 });
@@ -88,13 +88,13 @@ onMounted(async () => {
       debug.info(context, 'Team logo updated', { logoUrl: homeTeamLogo.value });
     }
     
-    // Load team theme colors
+    // Load team theme colors (pass the object to ensure color fields are read)
     if (currentTeamInfo.value) {
-      await loadTeamTheme(currentTeamInfo.value.team_name);
+      await loadTeamTheme(currentTeamInfo.value);
       debug.info(context, `Theme loaded for: ${currentTeamInfo.value.team_name}`);
     }
     
-    // Update user preferences sport if available in team info
+    // Update sport preference
     if (currentTeamInfo.value?.sport) {
       userPreferences.selectedSport = currentTeamInfo.value.sport;
       debug.info(context, `Sport updated to: ${userPreferences.selectedSport}`);
@@ -147,7 +147,8 @@ async function handleNavChange() {
         homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
       }
       if (currentTeamInfo.value) {
-        await loadTeamTheme(currentTeamInfo.value.team_name);
+        // Pass the TeamInfo object (not a string) to read primary/secondary colors
+        await loadTeamTheme(currentTeamInfo.value);
       }
 
       // Emit team change (Vue emit) and broadcast custom event for children
@@ -193,8 +194,10 @@ const switchTeam = async (teamName: string) => {
       homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
     }
     
-    // Load new theme
-    await loadTeamTheme(teamName);
+    // Load new theme (pass the object)
+    if (currentTeamInfo.value) {
+      await loadTeamTheme(currentTeamInfo.value);
+    }
     
     // Update sport preference
     if (currentTeamInfo.value?.sport) {
@@ -327,19 +330,11 @@ if (typeof window !== 'undefined') {
   z-index: 0;
 }
 
-.dashboard > div {
-  position: relative;
-  z-index: 1;
-}
+.dashboard > div { position: relative; z-index: 1; }
 
-.fade-in {
-  animation: fadeIn 0.5s ease-in-out;
-}
+.fade-in { animation: fadeIn 0.5s ease-in-out; }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .dashboard-title { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; padding-bottom: 15px; border-bottom: 1px dashed #888; }
 .sport-name { margin-bottom: 10px; }
@@ -354,10 +349,7 @@ if (typeof window !== 'undefined') {
 .dashboard-section:last-child { border-bottom: none; margin-bottom: 4rem; }
 .section-title { text-align: center; color: white; font-size: 2em; margin-bottom: 1.5rem; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1.5px; text-transform: uppercase; position: relative; padding-bottom: 0.5rem; }
 .section-title::after { content: ''; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 100px; height: 3px; background-color: var(--secondary-color, #ffcd00); }
-@media (max-width: 480px) {
-  .sport-name { font-size: 1.6em; }
-  .team-logo { max-width: 80px; margin-top: 15px; }
-}
+@media (max-width: 480px) { .sport-name { font-size: 1.6em; } .team-logo { max-width: 80px; margin-top: 15px; } }
 .standings-section .standings-table { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); margin: 0; padding: 0; list-style: none; }
 .standings-section .standings-table > li { display: flex; align-items: center; border-bottom: 1px solid #444; padding: 0.5em 0; }
 .standings-section .standings-table > li.header-row { font-weight: bold; border-bottom: 2px solid #666; padding-bottom: 0.7em; }

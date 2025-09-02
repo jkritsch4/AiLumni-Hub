@@ -1,7 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, defineProps, watch } from 'vue';
-import { themeColors } from '../services/theme';
-import { getStandings, getCurrentTeam } from '../services/api';
+import { getStandings, getCurrentTeam, getTeamInfo } from '../services/api';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 const standings = ref([]);
@@ -25,6 +24,129 @@ const props = defineProps({
   }
 });
 
+// Sport variant helper (covers common feed label differences)
+function sportVariants(sport) {
+  const s = (sport || '').toLowerCase();
+  if (s === 'basketball') {
+    return ['Basketball', "Men's Basketball", 'Mens Basketball', 'M Basketball'];
+  }
+  if (s === 'golf') {
+    return ['Golf', "Men's Golf", 'Mens Golf'];
+  }
+  return [sport];
+}
+
+/**
+ * Name matching helpers
+ * - Robust canonicalization
+ * - Explicit synonym groups so "USF" != "San Francisco State"
+ * - No substring matching to avoid cross-team collisions
+ */
+
+// Canonicalize a school string into a comparable form
+function canonicalize(input = '') {
+  return String(input)
+    .toLowerCase()
+    // normalize unicode apostrophes/quotes and dots
+    .replace(/[’'`]/g, '')
+    .replace(/\./g, '')
+    // normalize saint/st forms
+    .replace(/\b(st|saint)\b/g, 'saint')
+    // remove sport tokens
+    .replace(/\b(mens|men?s|womens|women?s)\b/g, '')
+    .replace(/\b(baseball|basketball|golf|soccer|volleyball|football|team)\b/g, '')
+    // normalize university abbreviations
+    .replace(/\buniv(?:ersity)?\b/g, 'university')
+    .replace(/\bcal poly san luis obispo\b/g, 'cal poly')
+    // collapse whitespace and non-alphanumerics
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Synonym groups: each inner array represents the same school
+const SYNONYM_GROUPS = [
+  // WCC examples
+  ['USF', 'San Francisco', 'University of San Francisco', 'Dons'],
+  ['USD', 'San Diego', 'University of San Diego', 'Toreros'],
+  ['LMU', 'Loyola Marymount', 'Loyola Marymount University'],
+  ['Saint Mary\'s', 'St Marys', 'St Mary\'s', 'Saint Marys', 'SMC', 'Saint Mary\'s College'],
+  ['Gonzaga', 'GU', 'Zags'],
+  ['Pacific', 'University of the Pacific', 'UOP', 'Tigers'],
+  ['Portland', 'University of Portland', 'Pilots'],
+  ['Santa Clara', 'SCU', 'Santa Clara University', 'Broncos'],
+  ['Pepperdine', 'Pepperdine University', 'Waves'],
+
+  // Big West / CSU examples
+  ['SF State', 'San Francisco State', 'San Francisco St', 'SFSU', 'Gators'],
+  ['UCSD', 'UC San Diego', 'University of California San Diego', 'Tritons'],
+  ['Cal Poly', 'Cal Poly SLO', 'California Polytechnic', 'Mustangs'],
+  ['Long Beach State', 'Long Beach', 'LBSU', 'Beach'],
+
+  // Add more as you expand schools
+];
+
+// Build a map from canonical variant to group index for fast lookup
+const GROUP_INDEX = (() => {
+  const map = new Map();
+  SYNONYM_GROUPS.forEach((group, idx) => {
+    group.forEach(v => map.set(canonicalize(v), idx));
+  });
+  return map;
+})();
+
+// Expand a label into canonical variants using the groups
+function expandSynonyms(label = '') {
+  const canon = canonicalize(label);
+  const result = new Set([canon]);
+
+  // From group mapping
+  const groupIdx = GROUP_INDEX.get(canon);
+  if (groupIdx !== undefined) {
+    for (const v of SYNONYM_GROUPS[groupIdx]) {
+      result.add(canonicalize(v));
+    }
+  }
+
+  // Heuristics for common forms
+  // Example: "university of x" vs "x"
+  const uniDrop = canon.replace(/\buniversity of\b/g, '').trim();
+  if (uniDrop && uniDrop !== canon) result.add(uniDrop);
+
+  // Example: "san diego" vs "sd", "san francisco state" vs "sf state"
+  const abbrev = uniDrop
+    .replace(/\bsan francisco state\b/g, 'sf state')
+    .replace(/\bsan francisco\b/g, 'sf')
+    .replace(/\bsan diego\b/g, 'sd')
+    .replace(/\blong beach state\b/g, 'lbsu');
+  if (abbrev && abbrev !== canon) result.add(abbrev);
+
+  return Array.from(result);
+}
+
+// True if two team labels refer to the same school (using groups and canon equality)
+function isSameSchool(a, b) {
+  const ca = canonicalize(a);
+  const cb = canonicalize(b);
+  if (!ca || !cb) return false;
+  if (ca === cb) return true;
+
+  const ga = GROUP_INDEX.get(ca);
+  const gb = GROUP_INDEX.get(cb);
+  if (ga !== undefined && gb !== undefined && ga === gb) return true;
+
+  // Cross-check expansions for exact equality (no substring matching)
+  const expandA = expandSynonyms(a);
+  const expandB = expandSynonyms(b);
+  const setB = new Set(expandB);
+  return expandA.some(v => setB.has(v));
+}
+
+// Use user’s current team or any subscribed team as the highlight target(s)
+function isTeamMatch(standingTeamName, teamLabel) {
+  if (!standingTeamName || !teamLabel) return false;
+  return isSameSchool(standingTeamName, teamLabel);
+}
+
 async function loadStandings() {
   const activeTeam = getCurrentTeam();
   const context = createDebugContext('Standings', 'loadStandings', { selectedSport: props.selectedSport, activeTeam });
@@ -33,67 +155,78 @@ async function loadStandings() {
   error.value = null;
   
   try {
-    debug.info(context, `Loading standings for sport: ${props.selectedSport}`);
-    const standingsData = await getStandings(props.selectedSport);
-    debug.info(context, `Retrieved ${standingsData.length} standings records`);
-    
-    if (standingsData.length === 0) {
-      standings.value = [];
-      conferenceFilter.value = '';
-      debug.warn(context, 'No standings data found');
-      return;
-    }
-    
-    // Determine the user's conference with priority:
-    // 1) Current (active) team
-    // 2) Any team in subscribedTeams
-    // 3) First conference available
-    let userConference = '';
+    // Try multiple sport labels and merge
+    const variants = sportVariants(props.selectedSport);
+    const seenKey = new Set();
+    const merged = [];
 
-    if (activeTeam) {
-      const activeStanding = standingsData.find(standing => isTeamMatch(standing.team_name, activeTeam));
-      if (activeStanding) {
-        userConference = activeStanding.standing_type;
-        debug.info(context, `Using active team conference: ${userConference} for current team: ${activeTeam}`);
-      }
-    }
-
-    if (!userConference) {
-      for (const team of props.subscribedTeams) {
-        const teamStanding = standingsData.find(standing => isTeamMatch(standing.team_name, team));
-        if (teamStanding) {
-          userConference = teamStanding.standing_type;
-          debug.info(context, `Found user conference: ${userConference} for subscribed team: ${team}`);
-          break;
+    for (const v of variants) {
+      const arr = await getStandings(v);
+      for (const item of (arr || [])) {
+        const key = `${(item.team_name || '').toLowerCase()}|${(item.standing_type || '').toLowerCase()}`;
+        if (!seenKey.has(key)) {
+          seenKey.add(key);
+          merged.push(item);
         }
       }
     }
-    
-    if (!userConference && standingsData.length > 0) {
-      userConference = standingsData[0].standing_type;
-      debug.info(context, `Using default conference: ${userConference}`);
+
+    debug.info(context, `Merged ${merged.length} standings records across sport variants: ${variants.join(', ')}`);
+
+    if (merged.length === 0) {
+      standings.value = [];
+      conferenceFilter.value = '';
+      debug.warn(context, 'No standings data found for any sport variant');
+      return;
     }
-    
+
+    // Prefer conference from TeamInfo; if not present, infer by matching a row
+    let userConference = '';
+    let inferredSport = props.selectedSport;
+
+    try {
+      const info = await getTeamInfo(activeTeam);
+      if (info?.conference_name) {
+        userConference = info.conference_name;
+        debug.info(context, `Using conference from TeamInfo: ${userConference}`);
+      }
+      if (info?.sport) {
+        inferredSport = info.sport;
+      }
+    } catch {
+      // ignore and infer from rows
+    }
+
+    if (!userConference) {
+      const row = merged.find(row => isTeamMatch(row.team_name, activeTeam) || props.subscribedTeams.some(t => isTeamMatch(row.team_name, t)));
+      if (row?.standing_type) {
+        userConference = row.standing_type;
+        debug.info(context, `Inferred conference from standings row: ${userConference} via team ${row.team_name}`);
+      }
+    }
+
+    // Absolute fallback: first conference available
+    if (!userConference && merged.length > 0) {
+      userConference = merged[0].standing_type || '';
+      debug.info(context, `Fallback conference: ${userConference}`);
+    }
+
     conferenceFilter.value = userConference;
-    
+
     // Filter by conference and sort by wins (desc), then losses (asc)
-    const conferenceStandings = standingsData
+    const conferenceStandings = merged
       .filter(team => team.standing_type === userConference)
       .sort((a, b) => {
         const winsA = parseInt(a.conf_wins) || 0;
         const lossesA = parseInt(a.conf_losses) || 0;
         const winsB = parseInt(b.conf_wins) || 0;
         const lossesB = parseInt(b.conf_losses) || 0;
-        
-        if (winsB !== winsA) {
-          return winsB - winsA;
-        } else {
-          return lossesA - lossesB;
-        }
+        if (winsB !== winsA) return winsB - winsA;
+        return lossesA - lossesB;
       });
-    
+
     standings.value = conferenceStandings;
-    debug.info(context, `Loaded ${conferenceStandings.length} standings for conference: ${userConference}`);
+    debug.info(context, `Loaded ${conferenceStandings.length} standings entries for ${userConference}`);
   } catch (err) {
     handleComponentError(context, err);
     error.value = err;
@@ -109,8 +242,7 @@ onMounted(() => {
   // Also refresh when URL navigation likely changed the current team (query params)
   window.addEventListener('popstate', loadStandings);
   window.addEventListener('hashchange', loadStandings);
-  // Optional custom hook if your app dispatches this on team change:
-  // window.dispatchEvent(new CustomEvent('aihub:team-changed'))
+  // Custom hook broadcast by Dashboard
   window.addEventListener('aihub:team-changed', loadStandings);
 });
 
@@ -129,63 +261,18 @@ watch(() => props.subscribedTeams, () => {
   loadStandings();
 }, { deep: true });
 
+// Keep the percentage helper the same
 function calculatePercentage(wins, losses) {
   const totalGames = wins + losses;
   if (isNaN(totalGames) || totalGames === 0) return 'N/A';
   return (wins / totalGames).toFixed(3).substring(1);
 }
 
-// Highlight helper: by default, highlight the current team; if not resolvable, fall back to any subscribed team
-function isUserTeam(standingTeamName, subscribedTeam = null) {
-  // If a specific team is provided, check that one
-  if (subscribedTeam) {
-    return isTeamMatch(standingTeamName, subscribedTeam);
-  }
-
+// Highlight if current team or any subscribed team matches (with synonym logic)
+function isUserTeam(standingTeamName) {
   const activeTeam = getCurrentTeam();
-  if (activeTeam && isTeamMatch(standingTeamName, activeTeam)) {
-    return true;
-  }
-  
-  // Fallback: match any subscribed team
-  return props.subscribedTeams.some(team => isTeamMatch(standingTeamName, team));
-}
-
-// Flexible name matching (covers common naming variations)
-function isTeamMatch(standingTeamName, subscribedTeam) {
-  if (!standingTeamName || !subscribedTeam) return false;
-
-  // Direct / case-insensitive match
-  if (standingTeamName === subscribedTeam) return true;
-  if (standingTeamName.toLowerCase() === subscribedTeam.toLowerCase()) return true;
-
-  // Common variations
-  const variations = [
-    { patterns: ['UCSD', 'UC San Diego'], match: ['UCSD', 'UC San Diego', 'University of California San Diego'] },
-    { patterns: ['UCLA'], match: ['UCLA', 'University of California Los Angeles'] },
-    { patterns: ['USC'], match: ['USC', 'University of Southern California'] }
-  ];
-  
-  for (const variation of variations) {
-    const standingMatches = variation.match.some(pattern => 
-      standingTeamName.toLowerCase().includes(pattern.toLowerCase())
-    );
-    const subscribedMatches = variation.patterns.some(pattern =>
-      subscribedTeam.toLowerCase().includes(pattern.toLowerCase())
-    );
-    if (standingMatches && subscribedMatches) return true;
-  }
-  
-  // Word overlap (e.g., "UCSD Baseball" vs "UC San Diego")
-  const standingWords = standingTeamName.toLowerCase().split(' ');
-  const subscribedWords = subscribedTeam.toLowerCase().split(' ');
-  
-  for (const word of subscribedWords) {
-    if (word.length > 2 && standingWords.some(sw => sw.includes(word))) {
-      return true;
-    }
-  }
-  return false;
+  if (activeTeam && isTeamMatch(standingTeamName, activeTeam)) return true;
+  return props.subscribedTeams.some(t => isTeamMatch(standingTeamName, t));
 }
 </script>
 
@@ -196,6 +283,7 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
       <p>Loading standings...</p>
     </div>
     <div v-if="error">Error loading standings: {{ error.message }}</div>
+
     <transition name="fade">
       <div v-if="!loading && !error && standings.length > 0" class="standings-table-container">
         <ul class="standings-table">
@@ -208,12 +296,10 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
             <span class="column-streak">Streak</span>
           </li>
           <li v-for="team in standings" 
-              :key="team.team_name" 
+              :key="team.team_name + team.standing_type" 
               class="table-row"
               :class="{ 'highlight-row': isUserTeam(team.team_name) }">
-            <span class="column-school">
-              {{ team.team_name }}
-            </span>
+            <span class="column-school">{{ team.team_name }}</span>
             <span class="column-conf-record">{{ team.conf_wins }}-{{ team.conf_losses }}</span>
             <span class="column-conf-pct">{{ calculatePercentage(parseInt(team.conf_wins), parseInt(team.conf_losses)) }}</span>
             <span class="column-overall-record">{{ team.overall_wins }}-{{ team.overall_losses }}</span>
@@ -223,6 +309,7 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
         </ul>
       </div>
     </transition>
+
     <p v-if="!loading && !error && standings.length === 0" class="no-data-message">
       No standings data found for {{ props.selectedSport }}{{ conferenceFilter ? ` in the ${conferenceFilter}` : '' }}.
     </p>
@@ -247,12 +334,14 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
+
+/* Table background now transparent; rows provide the tinted surface */
 .standings-table {
   list-style: none;
   padding: 0;
   width: 100%;
   border-collapse: collapse;
-  background-color: rgba(24, 43, 73, 0.7);
+  background-color: transparent;
   color: white;
   border-radius: 8px;
   font-size: 0.9em;
@@ -267,37 +356,54 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Header remains as-is via inline binding */
 .table-header {
   font-weight: bold;
   color: white;
   font-family: 'Arial', sans-serif;
   box-sizing: border-box;
-  background-color: var(--primary-color, #182B49);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
 }
+
+/* Data rows: darker translucent hue of primary */
 .table-row {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
-  background-color: rgba(24, 43, 73, 0.7);
-  transition: all 0.3s ease;
+  background-color: rgba(var(--primary-color-rgb, 24, 43, 73), 0.6);
+  transition: background-color 0.2s ease;
 }
-.table-row:last-child {
-  border-bottom: none;
+.table-row:hover {
+  background-color: rgba(var(--primary-color-rgb, 24, 43, 73), 0.6);
 }
+.table-row:last-child { border-bottom: none; }
+
+/* Highlight uses secondary accent (edge + inner glow), no change needed */
 .table-row.highlight-row:hover {
   background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.25);
   box-shadow: 
     inset 0 0 16px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.5),
     inset 0 0 8px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.9);
 }
+.highlight-row {
+  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15);
+  border-left: 6px solid var(--secondary-color, #FFCD00);
+  border-radius: 0 4px 4px 0;
+  font-weight: 600;
+  position: relative;
+  box-shadow: 
+    inset 0 0 12px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.4),
+    inset 0 0 5px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.8);
+  transition: all 0.3s ease;
+}
+
+/* Columns */
 .column-school,
 .column-conf-record,
 .column-conf-pct,
 .column-overall-record,
 .column-overall-pct,
-.column-streak,
-.column-home,
-.column-away,
-.column-neutral {
+.column-streak {
   padding: 12px;
   text-align: center;
   box-sizing: border-box;
@@ -310,18 +416,13 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   flex-grow: 1;
   text-align: left;
 }
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-.fade-enter-to,
-.fade-leave-from {
-  opacity: 1;
-}
+
+/* Transition */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.5s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-to, .fade-leave-from { opacity: 1; }
+
+/* Loading */
 .loading-spinner {
   display: flex;
   flex-direction: column;
@@ -340,17 +441,8 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   animation: spin 1s linear infinite;
   margin-bottom: 10px;
 }
-.highlight-row {
-  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15);
-  border-left: 6px solid var(--secondary-color, #FFCD00);
-  border-radius: 0 4px 4px 0;
-  font-weight: 600;
-  position: relative;
-  box-shadow: 
-    inset 0 0 12px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.4),
-    inset 0 0 5px rgba(var(--secondary-color-rgb, 255, 205, 0), 0.8);
-  transition: all 0.3s ease;
-}
+
+/* Empty state */
 .no-data-message {
   color: white;
   padding: 15px;
@@ -360,8 +452,6 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   margin: 15px auto;
   max-width: 80%;
 }
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 </style>

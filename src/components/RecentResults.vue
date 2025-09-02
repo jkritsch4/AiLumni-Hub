@@ -31,9 +31,9 @@
             <td>{{ formatDate(result.game_date) }}</td>
             <td>{{ getLocationText(result) }}</td>
             <td :class="{ 
-              'win': result.game_outcome === 'W', 
-              'loss': result.game_outcome === 'L',
-              'tie': result.game_outcome === 'T'
+              'win': getResultClass(result) === 'win', 
+              'loss': getResultClass(result) === 'loss',
+              'tie': getResultClass(result) === 'tie'
             }">
               {{ formatGameResult(result) }}
             </td>
@@ -128,21 +128,24 @@ function formatDate(dateString: string): string {
 }
 
 function formatGameResult(game: Game): string {
-  if (!game.team_score || !game.opponent_score) {
-    return `${game.game_outcome || 'N/A'}`;
+  // Use only game_outcome (normalized) for the Result column
+  if (game.game_outcome) {
+    // Normalize spacing in game_outcome  
+    return game.game_outcome.trim().replace(/\s+/g, ' ');
   }
   
-  const teamScore = parseInt(game.team_score.toString());
-  const oppScore = parseInt(game.opponent_score.toString());
-  
-  if (isNaN(teamScore) || isNaN(oppScore)) {
-    return `${game.game_outcome || 'N/A'}`;
+  // Last resort: infer from numeric scores if game_outcome is missing
+  if (game.team_score !== undefined && game.opponent_score !== undefined) {
+    const teamScore = parseInt(game.team_score.toString());
+    const oppScore = parseInt(game.opponent_score.toString());
+    
+    if (!isNaN(teamScore) && !isNaN(oppScore)) {
+      const letter = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'T';
+      return `${letter} ${teamScore}-${oppScore}`;
+    }
   }
   
-  const result = game.game_outcome === 'W' ? 'W' : 
-                 game.game_outcome === 'L' ? 'L' : 'T';
-  
-  return `${result} ${teamScore}-${oppScore}`;
+  return 'N/A';
 }
 
 function getLocationText(game: Game): string {
@@ -151,6 +154,17 @@ function getLocationText(game: Game): string {
     return game.game_location;
   }
   return game.home_away === 'Home' ? 'Home' : `@ ${game.opponent_name}`;
+}
+
+function getResultClass(game: Game): string {
+  const result = formatGameResult(game);
+  const firstChar = result.charAt(0).toUpperCase();
+  
+  if (firstChar === 'W') return 'win';
+  if (firstChar === 'L') return 'loss';
+  if (firstChar === 'T') return 'tie';
+  
+  return '';
 }
 </script>
 

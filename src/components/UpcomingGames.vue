@@ -32,7 +32,7 @@ const fetchUpcomingGame = async () => {
     console.log('[UpcomingGames] === FETCH UPCOMING GAME START ===');
     console.log('[UpcomingGames] Current team:', currentTeam);
     
-    // Try to get upcoming games first
+    // Try to get upcoming games first, but filter by actual future dates
     let games = await getUpcomingGames(currentTeam);
     console.log('[UpcomingGames] API response - upcoming games:', {
       count: games?.length || 0,
@@ -46,9 +46,22 @@ const fetchUpcomingGame = async () => {
     
     let nextGame = null;
     
-    if (games && games.length > 0) {
+    // Filter to only future-dated games using game_date/start_time
+    const now = new Date();
+    const futureGames = games ? games.filter(game => new Date(game.game_date) > now) : [];
+    console.log('[UpcomingGames] Future games after date filter:', {
+      originalCount: games?.length || 0,
+      futureCount: futureGames.length,
+      filteredGames: futureGames.map(g => ({
+        opponent: g.opponent_name,
+        date: g.game_date,
+        isFuture: new Date(g.game_date) > now
+      }))
+    });
+    
+    if (futureGames && futureGames.length > 0) {
       // Sort by game date and get the next upcoming game
-      nextGame = games.sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())[0];
+      nextGame = futureGames.sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())[0];
       console.log('[UpcomingGames] Found upcoming game:', {
         opponent: nextGame.opponent_name,
         date: nextGame.game_date,
@@ -84,12 +97,15 @@ const fetchUpcomingGame = async () => {
       }
       
       if (recentGames && recentGames.length > 0) {
-        nextGame = recentGames[0]; // Already sorted by most recent
+        // Choose the most recent with a score, if none have score use most recent
+        const gamesWithScore = recentGames.filter(g => g.game_outcome && g.game_outcome !== 'Pending');
+        nextGame = gamesWithScore.length > 0 ? gamesWithScore[0] : recentGames[0];
         showingPastGame.value = true;
         console.log('[UpcomingGames] Using most recent game as fallback:', {
           opponent: nextGame.opponent_name,
           date: nextGame.game_date,
-          hasOpponentLogo: !!nextGame.opponent_logo_url
+          hasOpponentLogo: !!nextGame.opponent_logo_url,
+          hasScore: !!nextGame.game_outcome && nextGame.game_outcome !== 'Pending'
         });
       }
     }
@@ -188,12 +204,21 @@ const opponentTeamName = computed(() => {
 
 const gameResult = computed(() => {
   if (!upcomingGame.value || !showingPastGame.value) return '';
+  
+  // Use only game_outcome (normalized). If missing, infer from numeric scores as last resort
   if (upcomingGame.value.game_outcome) {
-    const score = upcomingGame.value.team_score !== undefined && upcomingGame.value.opponent_score !== undefined
-      ? ` ${upcomingGame.value.team_score}-${upcomingGame.value.opponent_score}`
-      : '';
-    return `${upcomingGame.value.game_outcome}${score}`;
+    // Normalize spacing in game_outcome
+    return upcomingGame.value.game_outcome.trim().replace(/\s+/g, ' ');
   }
+  
+  // Last resort: infer from numeric scores if game_outcome is missing
+  if (upcomingGame.value.team_score !== undefined && upcomingGame.value.opponent_score !== undefined) {
+    const teamScore = upcomingGame.value.team_score;
+    const oppScore = upcomingGame.value.opponent_score;
+    const letter = teamScore > oppScore ? 'W' : teamScore < oppScore ? 'L' : 'T';
+    return `${letter} ${teamScore}-${oppScore}`;
+  }
+  
   return '';
 });
 
@@ -210,6 +235,20 @@ const handleImageError = (event) => {
 
 const handleImageLoad = (event) => {
   console.log('[UpcomingGames] Image loaded successfully:', event.target.src);
+};
+
+// Get opponent initials for fallback mode
+const getOpponentInitials = () => {
+  if (!upcomingGame.value?.opponent_name) return '';
+  
+  // Split by spaces and take first letter of each word, limit to 3 characters
+  const initials = upcomingGame.value.opponent_name
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase())
+    .join('')
+    .substring(0, 3);
+  
+  return initials;
 };
 </script>
 
@@ -242,8 +281,11 @@ const handleImageLoad = (event) => {
                :alt="opponentTeamName" 
                @error="handleImageError"
                @load="handleImageLoad" />
-          <div v-else class="pending-logo">
+          <div v-else-if="!showingPastGame" class="pending-logo">
             <span class="pending-text">PENDING</span>
+          </div>
+          <div v-else class="opponent-initials">
+            <span class="initials-text">{{ getOpponentInitials() }}</span>
           </div>
         </div>
       </div>
@@ -256,7 +298,7 @@ const handleImageLoad = (event) => {
           <strong>LOCATION:</strong> {{ formattedLocation }}
         </div>
         <div v-if="showingPastGame" class="past-indicator">
-          ⚠️ SHOWING MOST RECENT GAME - NEW SCHEDULE PENDING
+          ⚠️ Showing most recent game, new schedule pending
         </div>
       </div>
     </div>
@@ -332,6 +374,25 @@ const handleImageLoad = (event) => {
   letter-spacing: 1px;
 }
 
+.opponent-initials {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #666666;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.initials-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.2em;
+  color: #cccccc;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
 .vs-section {
   display: flex;
   flex-direction: column;
@@ -395,12 +456,12 @@ const handleImageLoad = (event) => {
     margin: 0.5rem 0;
   }
   
-  .team img, .pending-logo {
+  .team img, .pending-logo, .opponent-initials {
     width: 50px;
     height: 50px;
   }
   
-  .pending-text {
+  .pending-text, .initials-text {
     font-size: 0.7em;
   }
 }

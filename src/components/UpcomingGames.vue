@@ -22,6 +22,44 @@ onMounted(async () => {
   await fetchUpcomingGame();
 });
 
+// Helpers
+const isFuture = (isoLike) => {
+  if (!isoLike) return false;
+  const t = new Date(isoLike).getTime();
+  return Number.isFinite(t) && t > Date.now();
+};
+const hasScore = (g) => {
+  const a = g?.team_score;
+  const b = g?.opponent_score;
+  const parse = (n) => {
+    if (n === null || n === undefined || n === '') return null;
+    const v = typeof n === 'string' ? parseInt(n, 10) : n;
+    return Number.isFinite(v) ? v : null;
+  };
+  return parse(a) !== null && parse(b) !== null;
+};
+
+// Normalize "game_outcome" to avoid duplicates and ensure spacing, e.g. "L2-13" -> "L 2-13"
+const normalizeOutcome = (outcomeRaw, myScore, oppScore) => {
+  const raw = String(outcomeRaw ?? '').trim();
+  if (raw) {
+    return raw.replace(/^([WLT])\s*(\d)/i, '$1 $2').toUpperCase();
+  }
+  // Fallback only if outcome is missing but scores are present
+  const parse = (n) => {
+    if (n === null || n === undefined || n === '') return null;
+    const v = typeof n === 'string' ? parseInt(n, 10) : n;
+    return Number.isFinite(v) ? v : null;
+  };
+  const my = parse(myScore);
+  const opp = parse(oppScore);
+  if (my !== null && opp !== null) {
+    const letter = my > opp ? 'W' : my < opp ? 'L' : 'T';
+    return `${letter} ${my}-${opp}`.toUpperCase();
+  }
+  return '';
+};
+
 const fetchUpcomingGame = async () => {
   loading.value = true;
   error.value = null;
@@ -45,18 +83,23 @@ const fetchUpcomingGame = async () => {
     });
     
     let nextGame = null;
-    
-    if (games && games.length > 0) {
-      // Sort by game date and get the next upcoming game
-      nextGame = games.sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime())[0];
-      console.log('[UpcomingGames] Found upcoming game:', {
+
+    // Only consider future-dated games as "upcoming"
+    const futureGames = (games || [])
+      .filter(g => isFuture(g.game_date || g.start_time))
+      .sort((a, b) => new Date(a.game_date || a.start_time).getTime() - new Date(b.game_date || b.start_time).getTime());
+
+    if (futureGames.length > 0) {
+      nextGame = futureGames[0];
+      showingPastGame.value = false;
+      console.log('[UpcomingGames] Found future upcoming game:', {
         opponent: nextGame.opponent_name,
         date: nextGame.game_date,
         hasOpponentLogo: !!nextGame.opponent_logo_url
       });
     } else {
-      console.log('[UpcomingGames] No upcoming games found, fetching recent games for fallback...');
-      // If no upcoming games, get the most recent past game
+      console.log('[UpcomingGames] No future games found, fetching recent games for fallback...');
+      // If no upcoming games, get the most recent past game WITH a score
       const recentGames = await getRecentGames(currentTeam);
       console.log('[UpcomingGames] API response - recent games (fallback):', {
         count: recentGames?.length || 0,
@@ -66,32 +109,30 @@ const fetchUpcomingGame = async () => {
           parsedDate: new Date(g.game_date).toLocaleDateString(),
           outcome: g.game_outcome,
           hasOpponentLogo: !!g.opponent_logo_url,
-          opponentLogoUrl: g.opponent_logo_url
+          opponentLogoUrl: g.opponent_logo_url,
+          team_score: g.team_score,
+          opponent_score: g.opponent_score
         })) || []
       });
       
-      // Additional debugging: Show ALL recent games with dates to verify sorting
-      if (recentGames && recentGames.length > 0) {
-        console.log('[UpcomingGames] ALL recent games in order:', 
-          recentGames.map((g, idx) => ({
-            index: idx,
-            opponent: g.opponent_name,
-            date: g.game_date,
-            timestamp: new Date(g.game_date).getTime(),
-            isFirstGame: idx === 0
-          }))
-        );
+      // Sort most recent first and prefer those with a score
+      const sorted = (recentGames || []).slice().sort(
+        (a, b) => new Date(b.game_date || b.start_time).getTime() - new Date(a.game_date || a.start_time).getTime()
+      );
+      const withScores = sorted.filter(hasScore);
+      if (withScores.length > 0) {
+        nextGame = withScores[0];
+      } else if (sorted.length > 0) {
+        // Last resort: show most recent even if score missing
+        nextGame = sorted[0];
       }
-      
-      if (recentGames && recentGames.length > 0) {
-        nextGame = recentGames[0]; // Already sorted by most recent
-        showingPastGame.value = true;
-        console.log('[UpcomingGames] Using most recent game as fallback:', {
-          opponent: nextGame.opponent_name,
-          date: nextGame.game_date,
-          hasOpponentLogo: !!nextGame.opponent_logo_url
-        });
-      }
+      showingPastGame.value = !!nextGame;
+      console.log('[UpcomingGames] Using most recent game as fallback:', nextGame ? {
+        opponent: nextGame.opponent_name,
+        date: nextGame.game_date,
+        hasOpponentLogo: !!nextGame.opponent_logo_url,
+        hasScore: hasScore(nextGame)
+      } : 'none available');
     }
 
     if (nextGame) {
@@ -129,7 +170,7 @@ const fetchUpcomingGame = async () => {
         ...nextGame,
         ucsdLogo: teamLogo, // Always UCSD logo on the left
         opponentLogo: opponentLogo, // Only use API provided logo, null if not available
-        startTime: nextGame.game_date,
+        startTime: nextGame.game_date || nextGame.start_time,
         location: nextGame.game_location || (nextGame.home_away === 'Home' ? 'Home' : `@ ${nextGame.opponent_name}`)
       };
       
@@ -186,15 +227,20 @@ const opponentTeamName = computed(() => {
   return upcomingGame.value.opponent_name;
 });
 
+const opponentInitials = computed(() => {
+  const name = opponentTeamName.value || '';
+  if (!name.trim()) return 'TBD';
+  return name.split(/\s+/).map(w => w[0]).join('').slice(0, 3).toUpperCase();
+});
+
+// Use only game_outcome when present to avoid duplicate scores
 const gameResult = computed(() => {
   if (!upcomingGame.value || !showingPastGame.value) return '';
-  if (upcomingGame.value.game_outcome) {
-    const score = upcomingGame.value.team_score !== undefined && upcomingGame.value.opponent_score !== undefined
-      ? ` ${upcomingGame.value.team_score}-${upcomingGame.value.opponent_score}`
-      : '';
-    return `${upcomingGame.value.game_outcome}${score}`;
-  }
-  return '';
+  return normalizeOutcome(
+    upcomingGame.value.game_outcome,
+    upcomingGame.value.team_score,
+    upcomingGame.value.opponent_score
+  );
 });
 
 // Image loading handlers for debugging
@@ -242,6 +288,11 @@ const handleImageLoad = (event) => {
                :alt="opponentTeamName" 
                @error="handleImageError"
                @load="handleImageLoad" />
+          <!-- In fallback mode, avoid the dashed 'PENDING' box; show initials/text -->
+          <div v-else-if="showingPastGame" class="opponent-fallback">
+            {{ opponentInitials }}
+          </div>
+          <!-- Only show the dashed pending box for true upcoming mode -->
           <div v-else class="pending-logo">
             <span class="pending-text">PENDING</span>
           </div>
@@ -256,7 +307,7 @@ const handleImageLoad = (event) => {
           <strong>LOCATION:</strong> {{ formattedLocation }}
         </div>
         <div v-if="showingPastGame" class="past-indicator">
-          ⚠️ SHOWING MOST RECENT GAME - NEW SCHEDULE PENDING
+          Showing most recent game, new schedule pending
         </div>
       </div>
     </div>
@@ -324,6 +375,19 @@ const handleImageLoad = (event) => {
   background-color: rgba(0, 0, 0, 0.2);
 }
 
+.opponent-fallback {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.1em;
+  letter-spacing: 1px;
+  color: #e6e6e6;
+}
+
 .pending-text {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 0.9em;
@@ -378,10 +442,10 @@ const handleImageLoad = (event) => {
 
 .past-indicator {
   font-size: 0.9em;
-  color: #888888;
+  color: #cccccc;
   margin-top: 1rem;
   font-weight: bold;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
 }
 
 @media (max-width: 480px) {
@@ -395,7 +459,7 @@ const handleImageLoad = (event) => {
     margin: 0.5rem 0;
   }
   
-  .team img, .pending-logo {
+  .team img, .pending-logo, .opponent-fallback {
     width: 50px;
     height: 50px;
   }

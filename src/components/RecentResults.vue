@@ -5,7 +5,7 @@
     <div v-if="!loading && !error && recentResults.length > 0" class="results-table-container">
       <table class="results-table">
         <thead>
-          <tr :style="{ backgroundColor: primaryColor }">
+          <tr :style="{ backgroundColor: props.primaryColor }">
             <th>Opponent</th>
             <th>Date</th>
             <th>Location</th>
@@ -30,11 +30,7 @@
             </td>
             <td>{{ formatDate(result.game_date) }}</td>
             <td>{{ getLocationText(result) }}</td>
-            <td :class="{ 
-              'win': result.game_outcome === 'W', 
-              'loss': result.game_outcome === 'L',
-              'tie': result.game_outcome === 'T'
-            }">
+            <td :class="outcomeClass(result.game_outcome)">
               {{ formatGameResult(result) }}
             </td>
           </tr>
@@ -50,7 +46,6 @@
 <script setup lang="ts">
 import { ref, onMounted, defineProps, watch } from 'vue';
 import { getRecentGames, getCurrentTeam, type Game } from '../services/api';
-import { themeColors } from '../services/theme';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 const recentResults = ref<Game[]>([]);
@@ -127,22 +122,26 @@ function formatDate(dateString: string): string {
   }
 }
 
+// Normalize and display ONLY the raw game_outcome value (no appending)
+function normalizeOutcomeOnly(outcomeRaw: string | undefined | null): string {
+  const raw = String(outcomeRaw ?? '').trim();
+  if (!raw) return '';
+  // Ensure spacing like "L 2-13" instead of "L2-13" and normalize dash spacing
+  const spaced = raw.replace(/^([WLT])\s*(\d)/i, '$1 $2');
+  const dashTight = spaced.replace(/(\d)\s*-\s*(\d)/g, '$1-$2');
+  return dashTight.toUpperCase();
+}
+
 function formatGameResult(game: Game): string {
-  if (!game.team_score || !game.opponent_score) {
-    return `${game.game_outcome || 'N/A'}`;
-  }
-  
-  const teamScore = parseInt(game.team_score.toString());
-  const oppScore = parseInt(game.opponent_score.toString());
-  
-  if (isNaN(teamScore) || isNaN(oppScore)) {
-    return `${game.game_outcome || 'N/A'}`;
-  }
-  
-  const result = game.game_outcome === 'W' ? 'W' : 
-                 game.game_outcome === 'L' ? 'L' : 'T';
-  
-  return `${result} ${teamScore}-${oppScore}`;
+  return normalizeOutcomeOnly(game.game_outcome);
+}
+
+function outcomeClass(outcomeRaw?: string): string {
+  const first = (outcomeRaw || '').trim().charAt(0).toUpperCase();
+  if (first === 'W') return 'win';
+  if (first === 'L') return 'loss';
+  if (first === 'T') return 'tie';
+  return '';
 }
 
 function getLocationText(game: Game): string {
@@ -246,21 +245,6 @@ function getLocationText(game: Game): string {
 .opponent-name {
   font-weight: 500;
   font-size: 1em;
-}
-
-.win {
-  color: var(--secondary-color, #4caf50);
-  font-weight: bold;
-}
-
-.loss {
-  color: #f44336;
-  font-weight: bold;
-}
-
-.tie {
-  color: #ff9800;
-  font-weight: bold;
 }
 
 .no-results {

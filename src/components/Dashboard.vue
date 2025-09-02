@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch, inject } from 'vue';
+import { ref, reactive, onMounted, computed, watch } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
@@ -7,7 +7,6 @@ import SkeletonLoader from './ui/SkeletonLoader.vue';
 import { 
   getCurrentTeam, 
   setCurrentTeam, 
-  setCurrentTeamById,
   getTeamInfo, 
   getAllTeams,
   type TeamInfo 
@@ -22,21 +21,6 @@ const props = defineProps({
     default: ''
   }
 });
-
-// Try to get route, but handle gracefully if not available
-const route = inject('$route', null) as any;
-
-// Function to get URL parameters manually if route is not available
-const getUrlParams = () => {
-  if (typeof window !== 'undefined') {
-    const urlParams = new URLSearchParams(window.location.search);
-    return {
-      team_id: urlParams.get('team_id'),
-      sport: urlParams.get('sport')
-    };
-  }
-  return { team_id: null, sport: null };
-};
 
 // State management
 const isLoading = ref(true);
@@ -64,24 +48,12 @@ onMounted(async () => {
   try {
     debug.info(context, 'Starting Dashboard initialization');
     
-    // Read URL parameters for team_id and sport
-    const urlParams = route?.query || getUrlParams();
-    const teamId = urlParams.team_id as string;
-    const sport = urlParams.sport as string;
-    
-    debug.info(context, 'URL Parameters:', { teamId, sport });
-    
     // Load all available teams
     allTeams.value = await getAllTeams();
     debug.info(context, `Loaded ${allTeams.value.length} teams`);
     
-    // Set current team based on URL parameters or default
-    let currentTeam = getCurrentTeam();
-    if (teamId) {
-      debug.info(context, `Setting team from URL parameter: ${teamId}`);
-      setCurrentTeamById(teamId);
-      currentTeam = getCurrentTeam();
-    }
+    // Get current team or default to UCSD Baseball
+    const currentTeam = getCurrentTeam();
     debug.info(context, `Current team: ${currentTeam}`);
     
     // Load team info for the current team
@@ -96,15 +68,12 @@ onMounted(async () => {
     
     // Load team theme colors
     if (currentTeamInfo.value) {
-      await loadTeamTheme(currentTeamInfo.value);
+      await loadTeamTheme(currentTeamInfo.value.team_name);
       debug.info(context, `Theme loaded for: ${currentTeamInfo.value.team_name}`);
     }
     
-    // Update user preferences sport (use URL parameter if provided, otherwise use team's sport)
-    if (sport) {
-      userPreferences.selectedSport = sport;
-      debug.info(context, `Sport set from URL parameter: ${sport}`);
-    } else if (currentTeamInfo.value?.sport) {
+    // Update user preferences sport
+    if (currentTeamInfo.value?.sport) {
       userPreferences.selectedSport = currentTeamInfo.value.sport;
       debug.info(context, `Sport updated to: ${userPreferences.selectedSport}`);
     }
@@ -120,51 +89,6 @@ onMounted(async () => {
 // Watch for theme changes
 watch(() => themeColors, (newColors) => {
   debug.info(createDebugContext('Dashboard', 'themeWatch'), 'Theme colors updated', newColors);
-}, { deep: true });
-
-// Watch for route changes to handle URL parameter updates
-watch(() => route?.query || getUrlParams(), async (newQuery) => {
-  const context = createDebugContext('Dashboard', 'routeWatch');
-  debug.info(context, 'Route query changed', newQuery);
-  
-  const teamId = newQuery.team_id as string;
-  const sport = newQuery.sport as string;
-  
-  if (teamId) {
-    try {
-      isLoading.value = true;
-      
-      // Set new team
-      setCurrentTeamById(teamId);
-      const currentTeam = getCurrentTeam();
-      
-      // Load new team info
-      currentTeamInfo.value = await getTeamInfo(currentTeam);
-      
-      // Update logo
-      if (currentTeamInfo.value?.team_logo_url) {
-        homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
-      }
-      
-      // Load new theme
-      if (currentTeamInfo.value) {
-        await loadTeamTheme(currentTeamInfo.value);
-      }
-      
-      // Update sport preference
-      if (sport) {
-        userPreferences.selectedSport = sport;
-      } else if (currentTeamInfo.value?.sport) {
-        userPreferences.selectedSport = currentTeamInfo.value.sport;
-      }
-      
-      isLoading.value = false;
-      debug.info(context, `Successfully updated to team: ${currentTeam}`);
-    } catch (error) {
-      handleComponentError(context, error);
-      isLoading.value = false;
-    }
-  }
 }, { deep: true });
 
 const emit = defineEmits(['team-logo-loaded', 'team-changed']);
@@ -263,6 +187,7 @@ if (typeof window !== 'undefined') {
           <template v-else>
             <UpcomingGames 
               :subscribed-teams="subscribedTeams" 
+              :selected-sport="userPreferences.selectedSport"
               @team-logo-loaded="handleTeamLogoLoaded" 
             />
           </template>
@@ -274,6 +199,7 @@ if (typeof window !== 'undefined') {
           <RecentResults 
             :subscribed-teams="subscribedTeams" 
             :primary-color="primaryColor" 
+            :selected-sport="userPreferences.selectedSport" 
             style="width: 100%;"
           />
         </section>
@@ -285,6 +211,7 @@ if (typeof window !== 'undefined') {
             :primary-color="primaryColor" 
             :subscribed-teams="subscribedTeams"
             :selected-sport="userPreferences.selectedSport"
+            :selected-team="currentTeamName"
           />
         </section>
       </div>

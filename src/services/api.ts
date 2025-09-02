@@ -10,13 +10,14 @@ export interface TeamInfo {
   primaryThemeColor: string;
   secondaryThemeColor: string;
   sport: string;
+  conference_name?: string;
 }
 
 export interface Game {
   game_id: string;
   team_name: string;
   opponent_name: string;
-  game_date: string; // We'll map from start_time_utc
+  game_date: string; // mapped from start_time_utc
   game_outcome: 'W' | 'L' | 'T' | 'Pending' | null;
   team_score?: number;
   opponent_score?: number;
@@ -37,7 +38,7 @@ export interface Standing {
   conf_losses?: string;
   overall_wins?: string;
   overall_losses?: string;
-  standing_type?: string;
+  standing_type?: string; // conference or grouping
   streak?: string;
 }
 
@@ -59,7 +60,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // Team ID to team name mapping for URL parameters
 const TEAM_ID_MAPPING: Record<string, string> = {
   'sf-state': 'SF State Baseball',
-  'chico-state': 'Chico State Baseball', 
+  'chico-state': 'Chico State Baseball',
   'cal-poly-pomona': 'Cal Poly Pomona Baseball',
   'ucsd': 'UCSD Baseball'
 };
@@ -79,20 +80,38 @@ const FALLBACK_TEAM_INFO: TeamInfo[] = [
     sport: 'Baseball'
   },
   {
-    team_name: 'UCSD Men\'s Basketball',
+    team_name: "UCSD Men's Basketball",
     team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png',
     primaryThemeColor: '#182B49',
     secondaryThemeColor: '#FFCD00',
     sport: 'Basketball'
   },
   {
-    team_name: 'UCSD Men\'s Golf',
+    team_name: "UCSD Men's Golf",
     team_logo_url: 'https://ucsdtritons.com/images/logos/site/site.png',
     primaryThemeColor: '#182B49',
     secondaryThemeColor: '#FFCD00',
     sport: 'Golf'
   }
 ];
+
+// Normalize sport labels to reduce fragmentation
+function normalizeSport(s?: string): string {
+  const v = (s || '').toLowerCase().trim();
+  if (!v) return 'Baseball';
+  if (v === 'basketball' || v === "men's basketball" || v === 'mens basketball' || v === 'm basketball') return 'Basketball';
+  if (v === 'golf' || v === "men's golf" || v === 'mens golf' || v === 'm golf') return 'Golf';
+  if (v === 'baseball' || v === 'm baseball' || v === "men's baseball") return 'Baseball';
+  return s!;
+}
+
+// Safe extract for multiple key spellings
+function pick(obj: any, keys: string[], fallback?: any) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return fallback;
+}
 
 /**
  * Fetch data from AWS API
@@ -110,117 +129,128 @@ export const fetchAPIData = async (): Promise<APIResponse> => {
   try {
     debug.info(context, 'Fetching data from AWS API...');
     const response = await fetch(API_ENDPOINT);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const rawData = await response.json();
     debug.info(context, `Received ${rawData.length} raw data items`);
-    
+
     // Transform raw array data into structured format
-    const teamInfoData: TeamInfo[] = [];
+    const teamInfoByKey = new Map<string, TeamInfo>(); // key: team_name|sport
     const gamesData: Game[] = [];
     const standingsData: Standing[] = [];
-    
+
     for (const item of rawData) {
-      // Check if this item has team info (team_logo_url indicates team info)
+      const dataType = (item.dataType || item.datatype || '').toString().toLowerCase();
+      const sportNorm = normalizeSport(item.sport);
+
+      // TEAM INFO: Prefer explicit TeamInfo records for colors; fall back to first-seen game item if needed
       if (item.team_logo_url && item.team_name) {
-        const teamInfo: TeamInfo = {
-          team_name: item.team_name,
-          team_logo_url: item.team_logo_url,
-          primaryThemeColor: item.primaryThemeColor || '#182B49',
-          secondaryThemeColor: item.secondaryThemeColor || '#FFCD00',
-          sport: item.sport || 'Baseball'
-        };
-        // Avoid duplicates
-        if (!teamInfoData.find(t => t.team_name === teamInfo.team_name && t.sport === teamInfo.sport)) {
-          teamInfoData.push(teamInfo);
+        const key = `${item.team_name}|${sportNorm}`;
+        const existing = teamInfoByKey.get(key);
+
+        if (dataType === 'teaminfo') {
+          // Strong source of truth for colors
+          const ti: TeamInfo = {
+            team_name: item.team_name,
+            team_logo_url: item.team_logo_url,
+            primaryThemeColor: pick(item, ['primaryThemeColor', 'primary_color', 'primaryColor'], '#182B49'),
+            secondaryThemeColor: pick(item, ['secondaryThemeColor', 'secondary_color', 'secondaryColor'], '#FFCD00'),
+            sport: sportNorm,
+            conference_name: item.conference_name
+          };
+          teamInfoByKey.set(key, ti);
+        } else if (!existing) {
+          // Create minimal entry (without overriding colors later)
+          const ti: TeamInfo = {
+            team_name: item.team_name,
+            team_logo_url: item.team_logo_url,
+            primaryThemeColor: pick(item, ['primaryThemeColor', 'primary_color', 'primaryColor'], '#182B49'),
+            secondaryThemeColor: pick(item, ['secondaryThemeColor', 'secondary_color', 'secondaryColor'], '#FFCD00'),
+            sport: sportNorm,
+            conference_name: item.conference_name
+          };
+          teamInfoByKey.set(key, ti);
         }
       }
-      
-      // Check if this item is a game (has start_time_utc and opponent)
+
+      // GAMES
       if (item.start_time_utc && item.opponent_name) {
-        // Debug raw API data for opponent logo
-        console.log('[API] Raw game item opponent logo data:', {
-          opponent_name: item.opponent_name,
-          opponent_logo_url: item.opponent_logo_url,
-          opponent_logo_type: typeof item.opponent_logo_url,
-          opponent_logo_raw: JSON.stringify(item.opponent_logo_url),
-          all_keys: Object.keys(item)
-        });
-        
-        // Log raw API data for debugging recent games date sorting
-        if (item.team_name === 'UCSD Baseball' && item.game_outcome && item.game_outcome !== 'Pending') {
-          console.log('[API Debug] Raw completed game data:', {
-            opponent: item.opponent_name,
-            start_time_utc: item.start_time_utc,
-            game_outcome: item.game_outcome,
-            parsedDate: new Date(item.start_time_utc).toLocaleDateString()
-          });
-        }
-        
         const game: Game = {
           game_id: item.game_id || `${item.team_name}-${item.start_time_utc}-${item.opponent_name}`,
           team_name: item.team_name,
           opponent_name: item.opponent_name,
-          game_date: item.start_time_utc, // Map from start_time_utc
+          game_date: item.start_time_utc,
           team_score: item.score_team,
           opponent_score: item.score_opponent,
           game_outcome: item.game_outcome === 'Pending' ? null : item.game_outcome,
-          home_away: item.game_location && item.game_location.toLowerCase().includes('ucsd') ? 'Home' : 'Away',
-          sport: item.sport || 'Baseball',
+          home_away: item.game_location && item.game_location.toLowerCase().includes('home') ? 'Home' : 'Away',
+          sport: sportNorm,
           game_location: item.game_location,
           opponent_logo_url: item.opponent_logo_url
         };
         gamesData.push(game);
       }
-      
-      // Check if this item is standings data (has wins/losses)
-      if (item.conf_wins !== undefined || item.overall_wins !== undefined) {
-        const overallWins = parseInt(item.overall_wins) || 0;
-        const overallLosses = parseInt(item.overall_losses) || 0;
+
+      // STANDINGS: accept by dataType or by presence of win/loss fields in many variants
+      const isStandingsType = dataType.includes('stand');
+      const hasWinsLosses =
+        item.conf_wins !== undefined || item.overall_wins !== undefined ||
+        item.confWins !== undefined || item.overallWins !== undefined ||
+        item.conference_wins !== undefined || item.conference_losses !== undefined ||
+        item.overall_losses !== undefined;
+
+      if (isStandingsType || hasWinsLosses) {
+        const overallWins = parseInt(pick(item, ['overall_wins', 'overallWins'], '0')) || 0;
+        const overallLosses = parseInt(pick(item, ['overall_losses', 'overallLosses'], '0')) || 0;
         const totalGames = overallWins + overallLosses;
         const winPercentage = totalGames > 0 ? overallWins / totalGames : 0;
-        
+
         const standing: Standing = {
           team_name: item.team_name,
           wins: overallWins,
           losses: overallLosses,
           win_percentage: winPercentage,
-          rank: parseInt(item.rank) || 0,
-          sport: item.sport || 'Baseball',
-          conf_wins: item.conf_wins,
-          conf_losses: item.conf_losses,
-          overall_wins: item.overall_wins,
-          overall_losses: item.overall_losses,
-          standing_type: item.standing_type,
-          streak: item.streak
+          rank: parseInt(pick(item, ['rank', 'Rank'], '0')) || 0,
+          sport: normalizeSport(pick(item, ['sport', 'Sport'], sportNorm)),
+          conf_wins: pick(item, ['conf_wins', 'confWins', 'conference_wins']),
+          conf_losses: pick(item, ['conf_losses', 'confLosses', 'conference_losses']),
+          overall_wins: pick(item, ['overall_wins', 'overallWins']),
+          overall_losses: pick(item, ['overall_losses', 'overallLosses']),
+          standing_type: pick(item, ['standing_type', 'standingType', 'conference_name', 'SK']),
+          streak: pick(item, ['streak', 'Streak'])
         };
         standingsData.push(standing);
       }
     }
-    
+
+    const teamInfoData = Array.from(teamInfoByKey.values());
+
+    // Debug summary: how many standings per normalized sport
+    const countsBySport = standingsData.reduce<Record<string, number>>((acc, s) => {
+      const k = s.sport || 'Unknown';
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {});
+    debug.info(context, 'Successfully processed API data', {
+      teamInfoCount: teamInfoData.length,
+      gamesCount: gamesData.length,
+      standingsCount: standingsData.length,
+      standingsBySport: countsBySport
+    });
+
     const data: APIResponse = {
       TeamInfo: teamInfoData,
       Games: gamesData,
       Standings: standingsData
     };
-    
+
     // Cache the data
     apiDataCache = data;
     lastFetchTime = now;
-    
-    debug.info(context, 'Successfully processed API data', {
-      teamInfoCount: data.TeamInfo.length,
-      gamesCount: data.Games.length,
-      standingsCount: data.Standings.length
-    });
+
     return data;
-    
+
   } catch (error) {
     handleComponentError(context, error);
-    
     // Return fallback data
     debug.warn(context, 'Using fallback data due to API error');
     return {
@@ -299,7 +329,6 @@ export const getTeamInfo = async (teamName?: string): Promise<TeamInfo | null> =
  */
 export const getAllTeams = async (): Promise<TeamInfo[]> => {
   const context = createDebugContext('API', 'getAllTeams');
-  
   try {
     debug.info(context, 'Fetching all teams');
     const data = await fetchAPIData();
@@ -316,24 +345,20 @@ export const getAllTeams = async (): Promise<TeamInfo[]> => {
  */
 export const getUpcomingGames = async (teamName?: string): Promise<Game[]> => {
   const context = createDebugContext('API', 'getUpcomingGames', { teamName });
-  
   try {
     const targetTeam = teamName || currentSelectedTeam;
     debug.info(context, `Fetching upcoming games for: ${targetTeam}`);
-    
     const data = await fetchAPIData();
-    
-    // Defensive check for data structure
+
     if (!data || !data.Games || !Array.isArray(data.Games)) {
       debug.warn(context, 'Invalid or missing Games data structure', { data });
       return [];
     }
-    
-    // Filter games where game_outcome is null or 'Pending' (upcoming) and team matches
+
     const upcomingGames = data.Games
       .filter(game => game && game.team_name === targetTeam && (game.game_outcome === null || game.game_outcome === 'Pending'))
       .sort((a, b) => new Date(a.game_date).getTime() - new Date(b.game_date).getTime());
-    
+
     debug.info(context, `Found ${upcomingGames.length} upcoming games for: ${targetTeam}`);
     return upcomingGames;
   } catch (error) {
@@ -347,25 +372,21 @@ export const getUpcomingGames = async (teamName?: string): Promise<Game[]> => {
  */
 export const getRecentGames = async (teamName?: string): Promise<Game[]> => {
   const context = createDebugContext('API', 'getRecentGames', { teamName });
-  
   try {
     const targetTeam = teamName || currentSelectedTeam;
     debug.info(context, `Fetching recent games for: ${targetTeam}`);
-    
     const data = await fetchAPIData();
-    
-    // Defensive check for data structure
+
     if (!data || !data.Games || !Array.isArray(data.Games)) {
       debug.warn(context, 'Invalid or missing Games data structure', { data });
       return [];
     }
-    
-    // Filter games where game_outcome is not null/Pending (completed) and team matches
+
     const recentGames = data.Games
       .filter(game => game && game.team_name === targetTeam && game.game_outcome && game.game_outcome !== 'Pending')
       .sort((a, b) => new Date(b.game_date).getTime() - new Date(a.game_date).getTime())
-      .slice(0, 10); // Get last 10 games
-    
+      .slice(0, 10);
+
     debug.info(context, `Found ${recentGames.length} recent games for: ${targetTeam}`);
     debug.info(context, 'Recent games with dates (most recent first):', 
       recentGames.slice(0, 5).map(game => ({
@@ -387,26 +408,26 @@ export const getRecentGames = async (teamName?: string): Promise<Game[]> => {
  */
 export const getStandings = async (sport: string): Promise<Standing[]> => {
   const context = createDebugContext('API', 'getStandings', { sport });
-  
   try {
     debug.info(context, `Fetching standings for sport: ${sport}`);
     const data = await fetchAPIData();
-    
-    // Defensive check for data structure
+
     if (!data || !data.Standings || !Array.isArray(data.Standings)) {
       debug.warn(context, 'Invalid or missing Standings data structure', { data });
       return [];
     }
-    
-    // Filter standings by sport and sort by win percentage
+
+    // Accept any normalized variant
+    const variants = new Set<string>([
+      normalizeSport(sport),
+      'Basketball', "Men's Basketball", 'Mens Basketball', 'M Basketball',
+      'Baseball', 'Golf'
+    ]);
+
     const standings = data.Standings
-      .filter(standing => standing && standing.sport === sport)
-      .sort((a, b) => {
-        const aWinPct = a.win_percentage || 0;
-        const bWinPct = b.win_percentage || 0;
-        return bWinPct - aWinPct;
-      });
-    
+      .filter(standing => standing && variants.has(normalizeSport(standing.sport)))
+      .sort((a, b) => (b.win_percentage || 0) - (a.win_percentage || 0));
+
     debug.info(context, `Found ${standings.length} standings for sport: ${sport}`);
     return standings;
   } catch (error) {
@@ -420,35 +441,24 @@ export const getStandings = async (sport: string): Promise<Standing[]> => {
  */
 export const getTeamColors = async (teamName?: string): Promise<{ primaryColor: string, secondaryColor: string }> => {
   const context = createDebugContext('API', 'getTeamColors', { teamName });
-  
   try {
     debug.info(context, `Fetching team colors for: ${teamName || currentSelectedTeam}`);
     const teamInfo = await getTeamInfo(teamName);
-    
     if (!teamInfo) {
       debug.warn(context, 'Team info not found, using default colors');
-      // Return default colors
-      return {
-        primaryColor: '#182B49',
-        secondaryColor: '#FFCD00'
-      };
+      return { primaryColor: '#182B49', secondaryColor: '#FFCD00' };
     }
-    
     debug.info(context, 'Successfully retrieved team colors', {
       primaryColor: teamInfo.primaryThemeColor,
       secondaryColor: teamInfo.secondaryThemeColor
     });
-    
     return {
       primaryColor: teamInfo.primaryThemeColor,
       secondaryColor: teamInfo.secondaryThemeColor
     };
   } catch (error) {
     handleComponentError(context, error);
-    return {
-      primaryColor: '#182B49',
-      secondaryColor: '#FFCD00'
-    };
+    return { primaryColor: '#182B49', secondaryColor: '#FFCD00' };
   }
 };
 
@@ -457,12 +467,10 @@ export const getTeamColors = async (teamName?: string): Promise<{ primaryColor: 
  */
 export const getTeamLogo = async (teamName?: string): Promise<string> => {
   const context = createDebugContext('API', 'getTeamLogo', { teamName });
-  
   try {
     debug.info(context, `Fetching team logo for: ${teamName || currentSelectedTeam}`);
     const teamInfo = await getTeamInfo(teamName);
     const logoUrl = teamInfo?.team_logo_url || '/images/default-logo.png';
-    
     debug.info(context, 'Successfully retrieved team logo', { logoUrl });
     return logoUrl;
   } catch (error) {
@@ -487,7 +495,6 @@ export interface TeamData {
 
 export const getTeamData = async (teamName: string = 'USD Baseball'): Promise<TeamData> => {
   const teamInfo = await getTeamInfo(teamName);
-  
   if (!teamInfo) {
     return {
       team_name: teamName,
@@ -497,7 +504,6 @@ export const getTeamData = async (teamName: string = 'USD Baseball'): Promise<Te
       sport: 'Baseball'
     };
   }
-  
   return {
     team_name: teamInfo.team_name,
     team_logo_url: teamInfo.team_logo_url,
@@ -510,12 +516,7 @@ export const getTeamData = async (teamName: string = 'USD Baseball'): Promise<Te
 export const getTeamDataWithColors = async (teamName: string = 'USD Baseball'): Promise<TeamData & { primaryColor: string, secondaryColor: string }> => {
   const data = await getTeamData(teamName);
   const colors = await getTeamColors(teamName);
-  
-  return {
-    ...data,
-    primaryColor: colors.primaryColor,
-    secondaryColor: colors.secondaryColor
-  };
+  return { ...data, primaryColor: colors.primaryColor, secondaryColor: colors.secondaryColor };
 };
 
 // Caching functions
@@ -530,9 +531,7 @@ export const cacheTeamData = (data: TeamData): void => {
 export const getCachedTeamData = (): TeamData | null => {
   try {
     const cachedData = localStorage.getItem('teamData');
-    if (cachedData) {
-      return JSON.parse(cachedData);
-    }
+    if (cachedData) return JSON.parse(cachedData);
   } catch (error) {
     console.warn('[API] Error reading cached team data:', error);
   }
@@ -551,8 +550,5 @@ export const getCachedTeamColors = (): { primaryColor: string, secondaryColor: s
   } catch (error) {
     console.warn('[API] Error reading cached team colors:', error);
   }
-  return {
-    primaryColor: '#182B49',
-    secondaryColor: '#FFCD00'
-  };
+  return { primaryColor: '#182B49', secondaryColor: '#FFCD00' };
 };

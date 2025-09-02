@@ -1,7 +1,13 @@
 <template>
   <div class="recent-results-section">
-    <div v-if="loading" class="loading">Loading recent results...</div>
+    <!-- Card-style loading (matches Upcoming Game feel) -->
+    <div v-if="loading" class="loading-card fade-in-card" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="loading-text">Loading Recent Results...</p>
+    </div>
+
     <div v-if="error" class="error">Error loading results: {{ error?.message }}</div>
+
     <div v-if="!loading && !error && recentResults.length > 0" class="results-table-container">
       <table class="results-table">
         <thead>
@@ -175,13 +181,48 @@ function getLocationText(game: Game): string {
   color: white;
 }
 
-.loading, .error {
-  text-align: center;
-  padding: 20px;
+/* Card-style loading (matches Upcoming Game "box fade-in") */
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 14px;
+  background: var(--primary-40a, rgba(24,43,73,0.40));
+  border: 1px solid var(--secondary-25a, rgba(255,205,0,0.25));
+  border-radius: 16px;
+  box-shadow:
+    0 10px 24px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.fade-in-card { animation: cardFade 220ms ease-in; }
+@keyframes cardFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: conic-gradient(var(--secondary-color, #FFCD00) 0 90deg, var(--primary-color, #182B49) 90deg 360deg);
+  -webkit-mask: radial-gradient(farthest-side, #0000 58%, #000 60%);
+          mask: radial-gradient(farthest-side, #0000 58%, #000 60%);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(1turn); } }
+
+.loading-text {
   color: white;
   font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 1.05rem;
 }
-.error { color: #ff6b6b; }
+
+.error {
+  text-align: center;
+  padding: 20px;
+  color: #ff6b6b;
+  font-family: 'Bebas Neue', sans-serif;
+}
 
 .results-table-container {
   overflow-x: auto;

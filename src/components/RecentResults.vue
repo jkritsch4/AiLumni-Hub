@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineProps, watch } from 'vue';
+import { ref, onMounted, onUnmounted, defineProps, watch } from 'vue';
 import { getRecentGames, getCurrentTeam, type Game } from '../services/api';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
@@ -73,11 +73,8 @@ async function loadRecentResults() {
     loading.value = true;
     error.value = null;
     
-    debug.info(context, `Loading recent results for teams: ${props.subscribedTeams.join(', ')}`);
-    
-    // Get current team (should match subscribed teams)
     const currentTeam = getCurrentTeam();
-    const teamToFetch = props.subscribedTeams.includes(currentTeam) ? currentTeam : props.subscribedTeams[0];
+    const teamToFetch = currentTeam || props.subscribedTeams[0] || '';
     
     if (!teamToFetch) {
       debug.warn(context, 'No team specified for recent results');
@@ -99,8 +96,22 @@ async function loadRecentResults() {
   }
 }
 
+function refetch() {
+  loadRecentResults();
+}
+
 onMounted(() => {
   loadRecentResults();
+  // Re-fetch when the current team changes via URL nav or custom event
+  window.addEventListener('popstate', refetch);
+  window.addEventListener('hashchange', refetch);
+  window.addEventListener('aihub:team-changed', refetch as EventListener);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', refetch);
+  window.removeEventListener('hashchange', refetch);
+  window.removeEventListener('aihub:team-changed', refetch as EventListener);
 });
 
 // Watch for changes in subscribed teams
@@ -171,9 +182,7 @@ function getLocationText(game: Game): string {
   font-family: 'Bebas Neue', sans-serif;
 }
 
-.error {
-  color: #ff6b6b;
-}
+.error { color: #ff6b6b; }
 
 .results-table-container {
   overflow-x: auto;
@@ -214,17 +223,9 @@ function getLocationText(game: Game): string {
   font-size: 1em;
 }
 
-.results-table tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.results-table tr:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.results-table tr:last-child td {
-  border-bottom: none;
-}
+.results-table tr { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.results-table tr:hover { background-color: rgba(255, 255, 255, 0.05); }
+.results-table tr:last-child td { border-bottom: none; }
 
 .opponent-cell {
   display: flex;
@@ -242,10 +243,7 @@ function getLocationText(game: Game): string {
   border-radius: 4px;
 }
 
-.opponent-name {
-  font-weight: 500;
-  font-size: 1em;
-}
+.opponent-name { font-weight: 500; font-size: 1em; }
 
 .no-results {
   color: white;
@@ -258,23 +256,9 @@ function getLocationText(game: Game): string {
 }
 
 @media (max-width: 768px) {
-  .results-table {
-    font-size: 0.8em;
-  }
-  
-  .results-table th, .results-table td {
-    padding: 8px 4px;
-  }
-  
-  .opponent-cell {
-    flex-direction: column;
-    gap: 4px;
-    text-align: center !important;
-  }
-  
-  .school-logo {
-    width: 20px;
-    height: 20px;
-  }
+  .results-table { font-size: 0.8em; }
+  .results-table th, .results-table td { padding: 8px 4px; }
+  .opponent-cell { flex-direction: column; gap: 4px; text-align: center !important; }
+  .school-logo { width: 20px; height: 20px; }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, defineProps, defineEmits, computed } from 'vue';
+import { ref, onMounted, onUnmounted, defineProps, defineEmits, computed } from 'vue';
 import { getUpcomingGames, getCurrentTeam, getRecentGames, getTeamInfo } from '../services/api';
 import { themeColors } from '../services/theme';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
@@ -20,7 +20,21 @@ const showingPastGame = ref(false);
 
 onMounted(async () => {
   await fetchUpcomingGame();
+  // Re-fetch when navigation or explicit team change occurs
+  window.addEventListener('popstate', refetch);
+  window.addEventListener('hashchange', refetch);
+  window.addEventListener('aihub:team-changed', refetch);
 });
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', refetch);
+  window.removeEventListener('hashchange', refetch);
+  window.removeEventListener('aihub:team-changed', refetch);
+});
+
+function refetch() {
+  fetchUpcomingGame();
+}
 
 // Helpers
 const isFuture = (isoLike) => {
@@ -43,7 +57,7 @@ const hasScore = (g) => {
 const normalizeOutcome = (outcomeRaw, myScore, oppScore) => {
   const raw = String(outcomeRaw ?? '').trim();
   if (raw) {
-    return raw.replace(/^([WLT])\s*(\d)/i, '$1 $2').toUpperCase();
+    return raw.replace(/^([WLT])\s*(\d)/i, '$1 $2').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').toUpperCase();
   }
   // Fallback only if outcome is missing but scores are present
   const parse = (n) => {
@@ -168,7 +182,7 @@ const fetchUpcomingGame = async () => {
       
       upcomingGame.value = {
         ...nextGame,
-        ucsdLogo: teamLogo, // Always UCSD logo on the left
+        ucsdLogo: teamLogo, // left logo (current team)
         opponentLogo: opponentLogo, // Only use API provided logo, null if not available
         startTime: nextGame.game_date || nextGame.start_time,
         location: nextGame.game_location || (nextGame.home_away === 'Home' ? 'Home' : `@ ${nextGame.opponent_name}`)
@@ -216,10 +230,10 @@ const formattedLocation = computed(() => {
   return upcomingGame.value.location.toUpperCase();
 });
 
-// UCSD is always shown on the left, opponent on the right
+// current team shown on the left, opponent on the right
 const ucsdTeamName = computed(() => {
   if (!upcomingGame.value) return '';
-  return upcomingGame.value.team_name; // This should be UCSD Baseball
+  return upcomingGame.value.team_name;
 });
 
 const opponentTeamName = computed(() => {
@@ -333,11 +347,7 @@ const handleImageLoad = (event) => {
   padding: 2rem;
 }
 
-.upcoming-game {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
+.upcoming-game { display: flex; flex-direction: column; gap: 1.5rem; }
 
 .teams {
   display: flex;
@@ -435,10 +445,7 @@ const handleImageLoad = (event) => {
   color: #cccccc;
 }
 
-.game-time strong, .game-location strong {
-  color: white;
-  margin-right: 0.5rem;
-}
+.game-time strong, .game-location strong { color: white; margin-right: 0.5rem; }
 
 .past-indicator {
   font-size: 0.9em;
@@ -449,23 +456,9 @@ const handleImageLoad = (event) => {
 }
 
 @media (max-width: 480px) {
-  .teams {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .vs-section {
-    transform: rotate(90deg);
-    margin: 0.5rem 0;
-  }
-  
-  .team img, .pending-logo, .opponent-fallback {
-    width: 50px;
-    height: 50px;
-  }
-  
-  .pending-text {
-    font-size: 0.7em;
-  }
+  .teams { flex-direction: column; gap: 1rem; }
+  .vs-section { transform: rotate(90deg); margin: 0.5rem 0; }
+  .team img, .pending-logo, .opponent-fallback { width: 50px; height: 50px; }
+  .pending-text { font-size: 0.7em; }
 }
 </style>

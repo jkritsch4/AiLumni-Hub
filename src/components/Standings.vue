@@ -1,7 +1,7 @@
 <script setup>
-import { ref, onMounted, defineProps, watch } from 'vue';
+import { ref, onMounted, onUnmounted, defineProps, watch } from 'vue';
 import { themeColors } from '../services/theme';
-import { getStandings } from '../services/api';
+import { getStandings, getCurrentTeam } from '../services/api';
 import { debug, createDebugContext, handleComponentError } from '../utils/debug';
 
 const standings = ref([]);
@@ -26,7 +26,8 @@ const props = defineProps({
 });
 
 async function loadStandings() {
-  const context = createDebugContext('Standings', 'loadStandings', { selectedSport: props.selectedSport });
+  const activeTeam = getCurrentTeam();
+  const context = createDebugContext('Standings', 'loadStandings', { selectedSport: props.selectedSport, activeTeam });
   
   loading.value = true;
   error.value = null;
@@ -43,20 +44,31 @@ async function loadStandings() {
       return;
     }
     
-    // Find the conference for the user's subscribed teams
+    // Determine the user's conference with priority:
+    // 1) Current (active) team
+    // 2) Any team in subscribedTeams
+    // 3) First conference available
     let userConference = '';
-    for (const team of props.subscribedTeams) {
-      const teamStanding = standingsData.find(standing => 
-        isUserTeam(standing.team_name, team)
-      );
-      if (teamStanding) {
-        userConference = teamStanding.standing_type;
-        debug.info(context, `Found user conference: ${userConference} for team: ${team}`);
-        break;
+
+    if (activeTeam) {
+      const activeStanding = standingsData.find(standing => isTeamMatch(standing.team_name, activeTeam));
+      if (activeStanding) {
+        userConference = activeStanding.standing_type;
+        debug.info(context, `Using active team conference: ${userConference} for current team: ${activeTeam}`);
+      }
+    }
+
+    if (!userConference) {
+      for (const team of props.subscribedTeams) {
+        const teamStanding = standingsData.find(standing => isTeamMatch(standing.team_name, team));
+        if (teamStanding) {
+          userConference = teamStanding.standing_type;
+          debug.info(context, `Found user conference: ${userConference} for subscribed team: ${team}`);
+          break;
+        }
       }
     }
     
-    // If no user conference found, use the first available conference
     if (!userConference && standingsData.length > 0) {
       userConference = standingsData[0].standing_type;
       debug.info(context, `Using default conference: ${userConference}`);
@@ -64,7 +76,7 @@ async function loadStandings() {
     
     conferenceFilter.value = userConference;
     
-    // Filter by conference and sort by wins
+    // Filter by conference and sort by wins (desc), then losses (asc)
     const conferenceStandings = standingsData
       .filter(team => team.standing_type === userConference)
       .sort((a, b) => {
@@ -74,9 +86,9 @@ async function loadStandings() {
         const lossesB = parseInt(b.conf_losses) || 0;
         
         if (winsB !== winsA) {
-          return winsB - winsA; // Sort by wins descending
+          return winsB - winsA;
         } else {
-          return lossesA - lossesB; // Then by losses ascending
+          return lossesA - lossesB;
         }
       });
     
@@ -84,6 +96,7 @@ async function loadStandings() {
     debug.info(context, `Loaded ${conferenceStandings.length} standings for conference: ${userConference}`);
   } catch (err) {
     handleComponentError(context, err);
+    error.value = err;
     standings.value = [];
   } finally {
     loading.value = false;
@@ -92,12 +105,29 @@ async function loadStandings() {
 
 onMounted(() => {
   loadStandings();
+
+  // Also refresh when URL navigation likely changed the current team (query params)
+  window.addEventListener('popstate', loadStandings);
+  window.addEventListener('hashchange', loadStandings);
+  // Optional custom hook if your app dispatches this on team change:
+  // window.dispatchEvent(new CustomEvent('aihub:team-changed'))
+  window.addEventListener('aihub:team-changed', loadStandings);
 });
 
-// Watch for sport changes and reload standings
+onUnmounted(() => {
+  window.removeEventListener('popstate', loadStandings);
+  window.removeEventListener('hashchange', loadStandings);
+  window.removeEventListener('aihub:team-changed', loadStandings);
+});
+
+// Watchers to reload when sport or subscribed teams change
 watch(() => props.selectedSport, () => {
   loadStandings();
 });
+
+watch(() => props.subscribedTeams, () => {
+  loadStandings();
+}, { deep: true });
 
 function calculatePercentage(wins, losses) {
   const totalGames = wins + losses;
@@ -105,36 +135,34 @@ function calculatePercentage(wins, losses) {
   return (wins / totalGames).toFixed(3).substring(1);
 }
 
-// Helper function to check if a team is the user's subscribed team
+// Highlight helper: by default, highlight the current team; if not resolvable, fall back to any subscribed team
 function isUserTeam(standingTeamName, subscribedTeam = null) {
-  // If specific subscribedTeam is provided, check against it
+  // If a specific team is provided, check that one
   if (subscribedTeam) {
     return isTeamMatch(standingTeamName, subscribedTeam);
   }
+
+  const activeTeam = getCurrentTeam();
+  if (activeTeam && isTeamMatch(standingTeamName, activeTeam)) {
+    return true;
+  }
   
-  // Otherwise check against all subscribed teams
+  // Fallback: match any subscribed team
   return props.subscribedTeams.some(team => isTeamMatch(standingTeamName, team));
 }
 
-// Helper function to match team names with various formats
+// Flexible name matching (covers common naming variations)
 function isTeamMatch(standingTeamName, subscribedTeam) {
-  // Direct match
-  if (standingTeamName === subscribedTeam) {
-    return true;
-  }
-  
-  // Case insensitive match
-  if (standingTeamName.toLowerCase() === subscribedTeam.toLowerCase()) {
-    return true;
-  }
-  
-  // Handle common variations
+  if (!standingTeamName || !subscribedTeam) return false;
+
+  // Direct / case-insensitive match
+  if (standingTeamName === subscribedTeam) return true;
+  if (standingTeamName.toLowerCase() === subscribedTeam.toLowerCase()) return true;
+
+  // Common variations
   const variations = [
-    // UCSD variations
     { patterns: ['UCSD', 'UC San Diego'], match: ['UCSD', 'UC San Diego', 'University of California San Diego'] },
-    // UCLA variations  
     { patterns: ['UCLA'], match: ['UCLA', 'University of California Los Angeles'] },
-    // USC variations
     { patterns: ['USC'], match: ['USC', 'University of Southern California'] }
   ];
   
@@ -145,13 +173,10 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
     const subscribedMatches = variation.patterns.some(pattern =>
       subscribedTeam.toLowerCase().includes(pattern.toLowerCase())
     );
-    
-    if (standingMatches && subscribedMatches) {
-      return true;
-    }
+    if (standingMatches && subscribedMatches) return true;
   }
   
-  // Check if main words match (for cases like "UCSD Baseball" vs "UC San Diego")
+  // Word overlap (e.g., "UCSD Baseball" vs "UC San Diego")
   const standingWords = standingTeamName.toLowerCase().split(' ');
   const subscribedWords = subscribedTeam.toLowerCase().split(' ');
   
@@ -160,7 +185,6 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
       return true;
     }
   }
-  
   return false;
 }
 </script>
@@ -184,9 +208,9 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
             <span class="column-streak">Streak</span>
           </li>
           <li v-for="team in standings" 
-            :key="team.team_name" 
-            class="table-row"
-            :class="{ 'highlight-row': isUserTeam(team.team_name) }">
+              :key="team.team_name" 
+              class="table-row"
+              :class="{ 'highlight-row': isUserTeam(team.team_name) }">
             <span class="column-school">
               {{ team.team_name }}
             </span>
@@ -317,7 +341,7 @@ function isTeamMatch(standingTeamName, subscribedTeam) {
   margin-bottom: 10px;
 }
 .highlight-row {
-  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15); /* Secondary color with transparency */
+  background-color: rgba(var(--secondary-color-rgb, 255, 205, 0), 0.15);
   border-left: 6px solid var(--secondary-color, #FFCD00);
   border-radius: 0 4px 4px 0;
   font-weight: 600;

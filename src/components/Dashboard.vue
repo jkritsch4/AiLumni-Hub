@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import UpcomingGames from './UpcomingGames.vue';
 import Standings from './Standings.vue';
 import RecentResults from './RecentResults.vue';
@@ -7,6 +7,7 @@ import SkeletonLoader from './ui/SkeletonLoader.vue';
 import { 
   getCurrentTeam, 
   setCurrentTeam, 
+  setCurrentTeamById,
   getTeamInfo, 
   getAllTeams,
   type TeamInfo 
@@ -41,6 +42,27 @@ const secondaryColor = computed(() => themeColors.secondary);
 const currentTeamName = computed(() => currentTeamInfo.value?.team_name || 'UCSD Baseball');
 const subscribedTeams = computed(() => [currentTeamName.value]);
 
+const emit = defineEmits(['team-logo-loaded', 'team-changed']);
+
+// Synchronously set current team and sport from URL BEFORE children mount
+(function initFromUrlEarly() {
+  try {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const teamId = params.get('team_id');
+    const sport = params.get('sport');
+
+    if (teamId) {
+      setCurrentTeamById(teamId);
+    }
+    if (sport) {
+      userPreferences.selectedSport = sport;
+    }
+  } catch (e) {
+    console.warn('[Dashboard] initFromUrlEarly failed:', e);
+  }
+})();
+
 // Load team data on mount
 onMounted(async () => {
   const context = createDebugContext('Dashboard', 'onMounted');
@@ -52,7 +74,7 @@ onMounted(async () => {
     allTeams.value = await getAllTeams();
     debug.info(context, `Loaded ${allTeams.value.length} teams`);
     
-    // Get current team or default to UCSD Baseball
+    // Get current team (already set from URL early if present)
     const currentTeam = getCurrentTeam();
     debug.info(context, `Current team: ${currentTeam}`);
     
@@ -72,7 +94,7 @@ onMounted(async () => {
       debug.info(context, `Theme loaded for: ${currentTeamInfo.value.team_name}`);
     }
     
-    // Update user preferences sport
+    // Update user preferences sport if available in team info
     if (currentTeamInfo.value?.sport) {
       userPreferences.selectedSport = currentTeamInfo.value.sport;
       debug.info(context, `Sport updated to: ${userPreferences.selectedSport}`);
@@ -84,14 +106,66 @@ onMounted(async () => {
     handleComponentError(context, error);
     isLoading.value = false;
   }
+
+  // Listen for URL navigation changes and re-apply team/sport
+  window.addEventListener('popstate', handleNavChange);
+  window.addEventListener('hashchange', handleNavChange);
 });
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', handleNavChange);
+  window.removeEventListener('hashchange', handleNavChange);
+});
+
+async function handleNavChange() {
+  const context = createDebugContext('Dashboard', 'handleNavChange');
+  try {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const teamId = params.get('team_id');
+    const sport = params.get('sport');
+
+    let changed = false;
+
+    if (teamId) {
+      setCurrentTeamById(teamId);
+      changed = true;
+    }
+    if (sport && sport !== userPreferences.selectedSport) {
+      userPreferences.selectedSport = sport;
+      changed = true;
+    }
+
+    if (changed) {
+      debug.info(context, 'Detected nav change; refreshing team info and theme');
+      isLoading.value = true;
+
+      const currentTeam = getCurrentTeam();
+      currentTeamInfo.value = await getTeamInfo(currentTeam);
+
+      if (currentTeamInfo.value?.team_logo_url) {
+        homeTeamLogo.value = currentTeamInfo.value.team_logo_url;
+      }
+      if (currentTeamInfo.value) {
+        await loadTeamTheme(currentTeamInfo.value.team_name);
+      }
+
+      // Emit team change (Vue emit) and broadcast custom event for children
+      emit('team-changed', currentTeam);
+      window.dispatchEvent(new CustomEvent('aihub:team-changed', { detail: { team: currentTeam } }));
+
+      isLoading.value = false;
+    }
+  } catch (e) {
+    handleComponentError(context, e);
+    isLoading.value = false;
+  }
+}
 
 // Watch for theme changes
 watch(() => themeColors, (newColors) => {
   debug.info(createDebugContext('Dashboard', 'themeWatch'), 'Theme colors updated', newColors);
 }, { deep: true });
-
-const emit = defineEmits(['team-logo-loaded', 'team-changed']);
 
 const handleTeamLogoLoaded = (newLogoUrl: string) => {
   console.log('[Dashboard] Team logo loaded:', newLogoUrl);
@@ -127,8 +201,9 @@ const switchTeam = async (teamName: string) => {
       userPreferences.selectedSport = currentTeamInfo.value.sport;
     }
     
-    // Emit team change event
+    // Emit team change events
     emit('team-changed', teamName);
+    window.dispatchEvent(new CustomEvent('aihub:team-changed', { detail: { team: teamName } }));
     
     isLoading.value = false;
     
@@ -220,6 +295,7 @@ if (typeof window !== 'undefined') {
 </template>
 
 <style scoped>
+/* (unchanged styles) */
 .dashboard-container {
   width: 100%;
   height: 100vh;
@@ -261,194 +337,36 @@ if (typeof window !== 'undefined') {
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.dashboard-title {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 10px;
-  padding-bottom: 15px;
-  border-bottom: 1px dashed #888;
-}
-
-.sport-name {
-  margin-bottom: 10px;
-}
-
-.top-sections {
-  flex-direction: column;
-  gap: 0;
-}
-
-.top-section {
-  width: 100%;
-  margin-bottom: 0;
-  padding-top: 15px;
-  padding-bottom: 15px;
-  border-bottom: 1px dashed #888;
-}
-
-.recent-results-section {
-  padding-bottom: 20px;
-}
-
-.standings-section {
-  overflow-x: auto;
-  padding-top: 10px;
-  padding-bottom: 15px;
-  border-top: none;
-  border-bottom: none;
-}
-
-.team-logo {
-  width: 100px;
-  height: auto;
-  margin-top: 40px;
-  background: transparent;
-  filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.3));
-}
-
-.sport-name {
-  font-size: 1.8em;
-}
-
-.recent-results-section h2,
-.standings-section h2,
-.upcoming-game-section h2 {
-  font-size: 1.1em;
-  margin-bottom: 6px;
-}
-
-.dashboard-section {
-  margin-bottom: 3rem;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.2);
-  padding-bottom: 2rem;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.dashboard-section:last-child {
-  border-bottom: none;
-  margin-bottom: 4rem;
-}
-
-.section-title {
-  text-align: center;
-  color: white;
-  font-size: 2em;
-  margin-bottom: 1.5rem;
-  font-family: 'Bebas Neue', sans-serif;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  position: relative;
-  padding-bottom: 0.5rem;
-}
-
-.section-title::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: 100px;
-  height: 3px;
-  background-color: var(--secondary-color, #ffcd00);
-}
-
+.dashboard-title { display: flex; flex-direction: column; align-items: center; margin-bottom: 10px; padding-bottom: 15px; border-bottom: 1px dashed #888; }
+.sport-name { margin-bottom: 10px; }
+.top-sections { flex-direction: column; gap: 0; }
+.top-section { width: 100%; margin-bottom: 0; padding-top: 15px; padding-bottom: 15px; border-bottom: 1px dashed #888; }
+.recent-results-section { padding-bottom: 20px; }
+.standings-section { overflow-x: auto; padding-top: 10px; padding-bottom: 15px; border-top: none; border-bottom: none; }
+.team-logo { width: 100px; height: auto; margin-top: 40px; background: transparent; filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.3)); }
+.sport-name { font-size: 1.8em; }
+.recent-results-section h2, .standings-section h2, .upcoming-game-section h2 { font-size: 1.1em; margin-bottom: 6px; }
+.dashboard-section { margin-bottom: 3rem; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 2rem; max-width: 900px; margin-left: auto; margin-right: auto; }
+.dashboard-section:last-child { border-bottom: none; margin-bottom: 4rem; }
+.section-title { text-align: center; color: white; font-size: 2em; margin-bottom: 1.5rem; font-family: 'Bebas Neue', sans-serif; letter-spacing: 1.5px; text-transform: uppercase; position: relative; padding-bottom: 0.5rem; }
+.section-title::after { content: ''; position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 100px; height: 3px; background-color: var(--secondary-color, #ffcd00); }
 @media (max-width: 480px) {
-  .sport-name {
-    font-size: 1.6em;
-  }
-  .team-logo {
-    max-width: 80px;
-    margin-top: 15px;
-  }
+  .sport-name { font-size: 1.6em; }
+  .team-logo { max-width: 80px; margin-top: 15px; }
 }
-
-.standings-section .standings-table {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.standings-section .standings-table > li {
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid #444;
-  padding: 0.5em 0;
-}
-
-.standings-section .standings-table > li.header-row {
-  font-weight: bold;
-  border-bottom: 2px solid #666;
-  padding-bottom: 0.7em;
-}
-
-.standings-section .standings-table > li > span {
-  text-align: center;
-  padding: 0.3em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.standings-section .standings-table > li > span:nth-child(1) {
-  text-align: left;
-}
-
-.standings-section table,
-.standings-section th,
-.standings-section td {
-  font-family: 'Arial', sans-serif;
-  font-size: 1em;
-  color: #fff;
-}
-
-.user-preferences-section {
-  padding: 20px;
-  background-color: #282828;
-  color: white;
-  border-radius: 5px;
-}
-
-.loading-placeholder {
-  width: 100px;
-  height: 100px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.6; }
-  50% { opacity: 0.8; }
-  100% { opacity: 0.6; }
-}
-
-.logo-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1rem;
-  background: transparent;
-}
-
-.team-name {
-  text-align: center;
-  color: white;
-  font-size: 1.5em;
-  font-family: 'Bebas Neue', sans-serif;
-  margin-top: 10px;
-}
+.standings-section .standings-table { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); margin: 0; padding: 0; list-style: none; }
+.standings-section .standings-table > li { display: flex; align-items: center; border-bottom: 1px solid #444; padding: 0.5em 0; }
+.standings-section .standings-table > li.header-row { font-weight: bold; border-bottom: 2px solid #666; padding-bottom: 0.7em; }
+.standings-section .standings-table > li > span { text-align: center; padding: 0.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.standings-section .standings-table > li > span:nth-child(1) { text-align: left; }
+.standings-section table, .standings-section th, .standings-section td { font-family: 'Arial', sans-serif; font-size: 1em; color: #fff; }
+.user-preferences-section { padding: 20px; background-color: #282828; color: white; border-radius: 5px; }
+.loading-placeholder { width: 100px; height: 100px; background: rgba(255, 255, 255, 0.1); border-radius: 8px; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 0.8; } 100% { opacity: 0.6; } }
+.logo-container { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1rem; background: transparent; }
+.team-name { text-align: center; color: white; font-size: 1.5em; font-family: 'Bebas Neue', sans-serif; margin-top: 10px; }
 </style>

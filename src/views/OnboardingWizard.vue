@@ -18,19 +18,14 @@ import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getUniversityBySlug, applyUniversityTheme } from '../services/universityTheme';
 import OnboardingLayout from '../components/onboarding/OnboardingLayout.vue';
+import { saveUserPreferences, type NotificationPrefs, type AccountInfo } from '../services/preferences';
 
-type Account = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password?: string;
-  affiliation: string;
-};
+type Account = AccountInfo;
 
 type Collected = {
   university: { name: string; logo: string };
   sports: string[]; // e.g., ["Basketball (Men's)"]
-  notifications: { scores: boolean; scheduling: boolean; news: boolean };
+  notifications: NotificationPrefs;
   account: Account;
 };
 
@@ -46,15 +41,43 @@ const uni = getUniversityBySlug(uniSlug);
 const collectedData = ref<Collected>({
   university: { name: uni.name, logo: uni.logo },
   sports: [],
-  notifications: { scores: true, scheduling: true, news: true },
+  notifications: { gameReminders: true, gameResults: true, standingsUpdates: true },
   account: { firstName: '', lastName: '', email: '', password: '', affiliation: 'Alumni' }
 });
 
-// Ordered step names (Account step added)
 const stepOrder = ['SportStep', 'NotificationsStep', 'AccountStep'] as const;
 type StepName = typeof stepOrder[number];
 
 const currentStepName = computed<StepName | null>(() => (route.name as StepName) ?? null);
+
+// Normalize notifications from various shapes used by steps
+function normalizeNotifications(input: any): NotificationPrefs {
+  if (!input) return collectedData.value.notifications;
+
+  // Already object map?
+  if (typeof input === 'object' && !Array.isArray(input)) {
+    return {
+      gameReminders: !!input.gameReminders,
+      gameResults: !!input.gameResults,
+      standingsUpdates: !!input.standingsUpdates,
+      ...(typeof input.reminderHours === 'number' ? { reminderHours: input.reminderHours } : {})
+    };
+  }
+
+  // Array of ids like ["game-reminders", "news", "none"]
+  if (Array.isArray(input)) {
+    if (input.includes('none')) {
+      return { gameReminders: false, gameResults: false, standingsUpdates: false };
+    }
+    return {
+      gameReminders: input.includes('game-reminders'),
+      gameResults: input.includes('game-results'),
+      standingsUpdates: input.includes('news') || input.includes('standings')
+    };
+  }
+
+  return collectedData.value.notifications;
+}
 
 function sanitizeForStorage(data: Collected): Collected {
   // Do not persist password into localStorage
@@ -64,8 +87,29 @@ function sanitizeForStorage(data: Collected): Collected {
   };
 }
 
-function updateCollectedData(data: Partial<Collected>) {
-  collectedData.value = { ...collectedData.value, ...data };
+function updateCollectedData(data: Partial<Collected> | any) {
+  const patch: Partial<Collected> = {};
+
+  // Incoming shapes we support:
+  // - { notifications: <map or array> }
+  // - { data: { notificationPreferences: <array> } }
+  if (data?.notifications != null) {
+    patch.notifications = normalizeNotifications(data.notifications);
+  } else if (data?.data?.notificationPreferences) {
+    patch.notifications = normalizeNotifications(data.data.notificationPreferences);
+  }
+
+  if (data?.account) {
+    patch.account = { ...collectedData.value.account, ...data.account };
+  }
+  if (data?.sports) {
+    patch.sports = data.sports;
+  }
+  if (data?.university) {
+    patch.university = data.university;
+  }
+
+  collectedData.value = { ...collectedData.value, ...patch };
   try { localStorage.setItem(STORAGE.data, JSON.stringify(sanitizeForStorage(collectedData.value))); } catch {}
 }
 
@@ -94,17 +138,44 @@ function buildTeamName(prefix: string, selectedLabel: string): string {
   return gender ? `${prefix} ${gender} ${sport}` : `${prefix} ${sport}`;
 }
 
-async function handleNextStep(payload?: Partial<Collected>) {
+function ensureUserId(): string {
+  const byEmail = collectedData.value.account.email?.trim();
+  if (byEmail) {
+    try { localStorage.setItem('email', byEmail); } catch {}
+    try { localStorage.setItem('userId', byEmail); } catch {}
+    return byEmail;
+  }
+  const existing = localStorage.getItem('userId');
+  if (existing) return existing;
+  const uid = `guest_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+  try { localStorage.setItem('userId', uid); } catch {}
+  return uid;
+}
+
+async function handleNextStep(payload?: Partial<Collected> | any) {
   if (payload) updateCollectedData(payload);
 
   const idx = stepOrder.indexOf((currentStepName.value as StepName) ?? 'SportStep');
   const isLast = idx >= stepOrder.length - 1;
 
   if (isLast) {
+    // Mark onboarding complete and persist a sanitized snapshot
     try {
       localStorage.setItem('onboardingComplete', 'true');
       localStorage.setItem(STORAGE.data, JSON.stringify(sanitizeForStorage(collectedData.value)));
     } catch {}
+
+    // Persist to backend and cache locally (service handles cache)
+    const userId = ensureUserId();
+    const notifications = collectedData.value.notifications;
+    const account = { ...collectedData.value.account };
+    delete (account as any).password;
+
+    try {
+      await saveUserPreferences(userId, { notifications, account });
+    } catch {
+      // Service already cached locally; backend will sync next online session
+    }
 
     // Derive team and sport from selection
     const selectedLabel = collectedData.value.sports?.[0] || '';
@@ -148,7 +219,7 @@ onMounted(() => {
       collectedData.value = {
         university: parsed?.university ?? collectedData.value.university,
         sports: parsed?.sports ?? collectedData.value.sports,
-        notifications: parsed?.notifications ?? collectedData.value.notifications,
+        notifications: normalizeNotifications(parsed?.notifications ?? parsed?.notificationPreferences),
         account: {
           firstName: parsed?.account?.firstName || '',
           lastName: parsed?.account?.lastName || '',

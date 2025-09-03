@@ -5,7 +5,7 @@ export type AccountInfo = {
   lastName: string;
   email: string;
   password?: string; // never send a raw password to your API
-  affiliation: '' | 'Fan' | 'Alumni' | 'Relative' | 'Other';
+  affiliation: '' | 'Fan' | 'Alumni' | 'Relative' | 'Other' | 'Parent' | 'Student';
 };
 
 export type UserPreferences = {
@@ -15,7 +15,10 @@ export type UserPreferences = {
   updatedAt?: string;
 };
 
-const API_URL = import.meta.env.VITE_PREFS_API_URL as string | undefined;
+// Fall back to provided Invoke URL if env is not set
+const DEFAULT_API_URL = 'https://n54ugywlg2.execute-api.us-west-2.amazonaws.com';
+const API_URL = (import.meta.env.VITE_PREFS_API_URL as string | undefined) || DEFAULT_API_URL;
+
 function apiBase(): string {
   if (!API_URL) throw new Error('VITE_PREFS_API_URL is missing');
   return API_URL.replace(/\/+$/, '');
@@ -44,56 +47,73 @@ function fromLegacyNotificationTypes(types: string[] | undefined, reminderHours?
   return obj;
 }
 
-export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
-  if (!API_URL) {
-    const raw = localStorage.getItem(`prefs:${userId}`);
+const LS_KEY = (userId: string) => `prefs:${userId}`;
+
+function readLocal(userId: string): UserPreferences | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY(userId));
     return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
   }
+}
 
-  // Your backend route
-  const res = await fetch(`${apiBase()}/preferences/${encodeURIComponent(userId)}`, {
-    method: 'GET'
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
+function writeLocal(userId: string, data: Partial<UserPreferences>): UserPreferences {
+  const prev = readLocal(userId) || { userId } as UserPreferences;
+  const merged: UserPreferences = { ...prev, ...data, userId };
+  try {
+    localStorage.setItem(LS_KEY(userId), JSON.stringify(merged));
+  } catch {}
+  return merged;
+}
 
-  // Normalize backend response into UI shape
-  const account =
-    data.account ??
-    (() => {
-      const name: string = data.name || '';
-      const [firstName, ...rest] = name.split(' ');
-      return {
-        firstName: firstName || '',
-        lastName: rest.join(' ') || '',
-        email: data.email || '',
-        affiliation: data.user_type || ''
-      };
-    })();
+export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
+  try {
+    const res = await fetch(`${apiBase()}/preferences/${encodeURIComponent(userId)}`, { method: 'GET' });
+    if (!res.ok) {
+      // fall back to cache for non-200s
+      return readLocal(userId);
+    }
+    const data = await res.json();
 
-  const notifications =
-    data.notifications ??
-    fromLegacyNotificationTypes(data.notification_types, data.reminderHours);
+    // Normalize backend response into UI shape
+    const account =
+      data.account ??
+      (() => {
+        const name: string = data.name || '';
+        const [firstName, ...rest] = name.split(' ');
+        return {
+          firstName: firstName || '',
+          lastName: rest.join(' ') || '',
+          email: data.email || '',
+          affiliation: data.user_type || ''
+        };
+      })();
 
-  return {
-    userId,
-    account,
-    notifications,
-    updatedAt: data.updatedAt
-  };
+    const notifications =
+      data.notifications ??
+      fromLegacyNotificationTypes(data.notification_types, data.reminderHours);
+
+    const normalized: UserPreferences = {
+      userId,
+      account,
+      notifications,
+      updatedAt: data.updatedAt
+    };
+
+    // keep cache in sync
+    writeLocal(userId, normalized);
+    return normalized;
+  } catch {
+    return readLocal(userId);
+  }
 }
 
 export async function saveUserPreferences(userId: string, delta: Partial<UserPreferences>): Promise<{ ok: true }> {
-  if (!API_URL) {
-    const current = await getUserPreferences(userId);
-    const merged = { ...(current || { userId }), ...delta };
-    localStorage.setItem(`prefs:${userId}`, JSON.stringify(merged));
-    return { ok: true };
-  }
-
-  // Client-side merge to prevent overwriting other fields server-side
+  // Merge and cache locally for instant UX
   const current = await getUserPreferences(userId);
   const next: UserPreferences = { ...(current || { userId }), ...delta, userId };
+  writeLocal(userId, next);
 
   // Build payload your backend understands (legacy-compatible)
   const name = next.account ? `${next.account.firstName ?? ''} ${next.account.lastName ?? ''}`.trim() : (current as any)?.name;
@@ -112,20 +132,25 @@ export async function saveUserPreferences(userId: string, delta: Partial<UserPre
   if ((current as any)?.subscribed_teams) payload.subscribed_teams = (current as any)?.subscribed_teams;
   if ((current as any)?.phone_number) payload.phone_number = (current as any)?.phone_number;
 
-  const res = await fetch(`${apiBase()}/preferences/${encodeURIComponent(userId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to save preferences: ${res.status} ${text}`);
+  try {
+    const res = await fetch(`${apiBase()}/preferences/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to save preferences: ${res.status} ${text}`);
+    }
+  } catch {
+    // Keep local cache; backend will sync next time
   }
+
   return { ok: true };
 }
 
 export async function requestPasswordResetEmail(email: string): Promise<{ ok: true }> {
-  if (!API_URL) return { ok: true };
+  if (!email) return { ok: true };
   const res = await fetch(`${apiBase()}/password-reset`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -14,13 +14,6 @@
             @click="selectSport(sport, 'men')"
           >
             <span class="label">{{ sport }}</span>
-            <img
-              v-if="logoByLabel[labelFor(sport, 'men')]"
-              class="team-logo"
-              :src="logoByLabel[labelFor(sport, 'men')]"
-              :alt="`${uni.name} ${sport} (Men's) logo`"
-              @error="onSportLogoError(labelFor(sport, 'men'))"
-            />
           </button>
         </li>
       </ul>
@@ -37,13 +30,6 @@
             @click="selectSport(sport, 'women')"
           >
             <span class="label">{{ sport }}</span>
-            <img
-              v-if="logoByLabel[labelFor(sport, 'women')]"
-              class="team-logo"
-              :src="logoByLabel[labelFor(sport, 'women')]"
-              :alt="`${uni.name} ${sport} (Women's) logo`"
-              @error="onSportLogoError(labelFor(sport, 'women'))"
-            />
           </button>
         </li>
       </ul>
@@ -72,6 +58,7 @@ export default {
       selectedLabel: '',
       mensSports: [],
       womensSports: [],
+      // Kept in case we later re-enable per-row logos, but not rendered now.
       logoByLabel: {},
       error: ''
     }
@@ -86,6 +73,7 @@ export default {
     const groups = getSportsGroups(this.uni)
     this.mensSports = groups.mens || []
     this.womensSports = groups.womens || []
+    // We can still fetch logos for future use; not shown in UI.
     this.fetchLogos()
   },
   methods: {
@@ -103,6 +91,17 @@ export default {
         const resp = await fetch('https://34g1eh6ord.execute-api.us-west-2.amazonaws.com/New_test/sports-events')
         const data = await resp.json()
         const prefix = this.uni.teamPrefix || this.uni.name
+
+        const normalize = (remainder) => {
+          const r = String(remainder || '').trim()
+          if (!r) return []
+          const mens = r.match(/^Men's\s+(.+)/i)
+          if (mens) return [`${mens[1].trim()} (Men's)`]
+          const womens = r.match(/^Women's\s+(.+)/i)
+          if (womens) return [`${womens[1].trim()} (Women's)`]
+          return [r, `${r} (Men's)`, `${r} (Women's)`]
+        }
+
         const map = {}
         if (Array.isArray(data)) {
           for (const item of data) {
@@ -111,7 +110,7 @@ export default {
             if (!team || !logo) continue
             if (team.startsWith(prefix + ' ')) {
               const remainder = team.substring(prefix.length + 1).trim()
-              map[remainder] = logo
+              for (const key of normalize(remainder)) map[key] = logo
             }
           }
         }
@@ -119,11 +118,6 @@ export default {
       } catch (e) {
         console.warn('[SportSelection] fetchLogos failed:', e)
       }
-    },
-    onSportLogoError(label) {
-      const next = { ...this.logoByLabel }
-      delete next[label]
-      this.logoByLabel = next
     },
     goBack() {
       if (this.$router && this.$route?.name === 'SportStep') {
@@ -151,6 +145,7 @@ export default {
 </script>
 
 <style scoped>
+/* Layout */
 .step-container {
   width: 100%;
   margin: 0 auto;
@@ -175,27 +170,28 @@ h2 {
   opacity: 0.9;
 }
 
+/* Section */
 .group {
-  /* Slightly narrower so cards don’t span the full content width */
-  width: min(520px, 50%);
+  width: 100%;
   margin: 12px auto 16px;
-  text-align: center;
+  text-align: center; /* center section heading */
 }
 
 .group-title {
   color: #fff;
-  margin: 0 0 8px 4px;
+  margin: 0 0 8px 0;
   font-weight: 800;
   letter-spacing: 0.3px;
 }
 
-/* Clean, compact list – explicitly defeat global UL styles */
+/* List container – center items */
 .sports-list {
   list-style: none;
   margin: 0 !important;
   padding: 0 !important;
   display: grid !important;
   gap: 10px !important;
+  justify-items: center !important;  /* center each row */
 
   background: transparent !important;
   border: 0 !important;
@@ -203,7 +199,7 @@ h2 {
   overflow: visible !important;
 }
 
-/* Reset any global LI styles */
+/* Reset any li defaults */
 .sports-list li {
   margin: 0 !important;
   padding: 0 !important;
@@ -212,35 +208,35 @@ h2 {
   box-shadow: none !important;
 }
 
-/* Transparent, theme-tinted pill buttons with strong overrides */
+/* Sport card – 50% of the viewport width, centered, darker translucent tint */
 .sports-list button.sport-card {
   appearance: none;
   -webkit-appearance: none;
 
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  width: 50vw;                /* requested: half the screen width */
+  max-width: 560px;           /* keep from getting too large on desktop */
+  border-radius: 14px !important;
+
+  display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;    /* center the text horizontally */
   padding: 12px 14px;
 
-  /* Dark hue based on the active team's primary color */
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
-  border-radius: 14px !important;
+  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.28) !important; /* darker, still transparent */
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
   color: #fff;
-
   text-align: center;
+
   cursor: pointer;
   transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
 
-  /* neutralize any global button decorations */
+  /* neutralize global button styles */
   box-shadow: none !important;
   background-image: none !important;
 }
 
 .sports-list button.sport-card:hover {
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.14) !important;
+  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.36) !important;
   transform: translateY(-1px);
 }
 .sports-list button.sport-card:focus-visible {
@@ -252,9 +248,10 @@ h2 {
   box-shadow: 0 0 0 3px rgba(255,205,0,0.22) !important;
 }
 
-.label { font-size: 1rem; font-weight: 700; }
-.team-logo { width: 40px; height: 40px; object-fit: contain; }
+/* Typography */
+.label { font-size: 1rem; font-weight: 700; text-align: center; }
 
+/* Buttons below */
 .navigation-buttons {
   display: flex;
   gap: 12px;

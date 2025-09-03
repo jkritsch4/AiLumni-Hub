@@ -1,4 +1,5 @@
-import { DEFAULT_UNIVERSITY, UNIVERSITIES, UniversityConfig } from '../config/universities';
+import type { UniversityConfig } from '../config/universities';
+import { DEFAULT_UNIVERSITY, UNIVERSITIES } from '../config/universities';
 
 export function getUniversityBySlug(slug?: string | null): UniversityConfig {
   if (!slug) return DEFAULT_UNIVERSITY;

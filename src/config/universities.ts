@@ -12,11 +12,8 @@ export type UniversityConfig = {
     secondary: string; // hex
     backgroundOverlay?: string; // optional rgba
   };
-  // Backwards compatible: you can still use a flat sports array
   sports?: string[];
-  // Preferred: grouped by men's and women's
   sportsGroups?: SportsGroups;
-  // Used to match API entries like "UCSD Baseball" to extract the sport label
   teamPrefix?: string;
 };
 
@@ -31,11 +28,10 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
       backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
     },
     teamPrefix: 'UCSD',
-    // Use grouped sports so the onboarding shows Men’s/Women’s lists
     sportsGroups: {
       mens: [
         'Baseball',
-        'Basketball',
+        'Basketball',              // UCSD Men's Basketball resolves via teamPrefix + "Men's Basketball"
         'Cross Country',
         'Fencing',
         'Golf',
@@ -63,6 +59,8 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
       ]
     }
   },
+
+  // IMPORTANT: teamPrefix changed to match feed strings like "SF State Baseball"
   sfsu: {
     slug: 'sfsu',
     name: 'San Francisco State',
@@ -72,15 +70,62 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
       secondary: '#FDB515',
       backgroundOverlay: 'rgba(35, 20, 60, 0.85)'
     },
-    teamPrefix: 'SFSU',
+    teamPrefix: 'SF State',
     sports: [
-      'Baseball',
+      'Baseball',                  // SF State Baseball
       "Basketball (Men's)",
       "Basketball (Women's)",
       'Volleyball',
       "Soccer (Men's)"
     ]
+  },
+
+  // University of San Diego (USD) – ensure "USD Baseball" matches
+  usd: {
+    slug: 'usd',
+    name: 'University of San Diego',
+    logo: '/images/default-logo.png',
+    colors: {
+      // neutral defaults; team colors from feed can still override in-theme flows
+      primary: '#182B49',
+      secondary: '#FFCD00',
+      backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
+    },
+    teamPrefix: 'USD',
+    sportsGroups: {
+      mens: [
+        'Baseball',                // USD Baseball
+        'Basketball'
+      ],
+      womens: [
+        'Basketball',
+        'Soccer'
+      ]
+    }
+  },
+
+  // University of San Francisco (USF) – ensure "USF Basketball" matches
+  usf: {
+    slug: 'usf',
+    name: 'University of San Francisco',
+    logo: '/images/default-logo.png',
+    colors: {
+      // neutral defaults; team colors from feed can still override in-theme flows
+      primary: '#182B49',
+      secondary: '#FFCD00',
+      backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
+    },
+    teamPrefix: 'USF',
+    sportsGroups: {
+      mens: [
+        'Basketball'               // USF Basketball
+      ],
+      womens: [
+        'Basketball'
+      ]
+    }
   }
+
   // Add more universities here (one-time setup)
 };
 

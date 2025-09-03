@@ -1,6 +1,5 @@
 <template>
   <OnboardingLayout :name="uni.name" :logo="uni.logo">
-    <!-- Wrap RouterView so we can catch child emits and pass props -->
     <RouterView v-slot="{ Component }">
       <component
         :is="Component"
@@ -20,15 +19,22 @@ import { useRoute, useRouter } from 'vue-router';
 import { getUniversityBySlug, applyUniversityTheme } from '../services/universityTheme';
 import OnboardingLayout from '../components/onboarding/OnboardingLayout.vue';
 
-type Collected = {
-  university: { name: string; logo: string };
-  sports: string[];
-  notifications: { scores: boolean; scheduling: boolean; news: boolean };
+type Account = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password?: string;
+  affiliation: string;
 };
 
-const STORAGE = {
-  data: 'onboarding:data',
-} as const;
+type Collected = {
+  university: { name: string; logo: string };
+  sports: string[]; // e.g., ["Basketball (Men's)"]
+  notifications: { scores: boolean; scheduling: boolean; news: boolean };
+  account: Account;
+};
+
+const STORAGE = { data: 'onboarding:data' } as const;
 
 const route = useRoute();
 const router = useRouter();
@@ -39,41 +45,77 @@ const uni = getUniversityBySlug(uniSlug);
 // Maintain data across steps and refreshes
 const collectedData = ref<Collected>({
   university: { name: uni.name, logo: uni.logo },
-  sports: ['UCSD Baseball'],
-  notifications: { scores: true, scheduling: true, news: true }
+  sports: [],
+  notifications: { scores: true, scheduling: true, news: true },
+  account: { firstName: '', lastName: '', email: '', password: '', affiliation: 'Alumni' }
 });
 
-// Declare ordered step names
-const stepOrder = ['ConfirmStep', 'SportStep', 'NotificationsStep'] as const;
+// Ordered step names (Account step added)
+const stepOrder = ['SportStep', 'NotificationsStep', 'AccountStep'] as const;
 type StepName = typeof stepOrder[number];
 
-const currentStepName = computed<StepName | null>(() => {
-  return (route.name as StepName) ?? null;
-});
+const currentStepName = computed<StepName | null>(() => (route.name as StepName) ?? null);
+
+function sanitizeForStorage(data: Collected): Collected {
+  // Do not persist password into localStorage
+  return {
+    ...data,
+    account: { ...data.account, password: '' }
+  };
+}
 
 function updateCollectedData(data: Partial<Collected>) {
   collectedData.value = { ...collectedData.value, ...data };
-  try { localStorage.setItem(STORAGE.data, JSON.stringify(collectedData.value)); } catch {}
+  try { localStorage.setItem(STORAGE.data, JSON.stringify(sanitizeForStorage(collectedData.value))); } catch {}
 }
 
-// Navigate to a step by name with current params
 async function goToStep(name: StepName) {
   await router.push({ name, params: { uniSlug: uni.slug } });
 }
 
-// Next/Previous logic driven by step order
+// Parse labels like "Basketball (Men's)" → { sport: "Basketball", gender: "Men's" }
+function parseSportLabel(label: string): { sport: string; gender: "Men's" | "Women's" | '' } {
+  if (!label) return { sport: 'Baseball', gender: '' };
+  const m = label.match(/^(.+?)\s*\((Men's|Women's)\)\s*$/i);
+  if (m) return { sport: capitalize(m[1].trim()), gender: m[2] as "Men's" | "Women's" };
+  return { sport: capitalize(label.trim()), gender: '' };
+}
+
+function capitalize(s: string) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// Construct canonical team name from university prefix and selection
+function buildTeamName(prefix: string, selectedLabel: string): string {
+  const { sport, gender } = parseSportLabel(selectedLabel);
+  if (sport.toLowerCase() === 'baseball') {
+    return `${prefix} Baseball`;
+  }
+  return gender ? `${prefix} ${gender} ${sport}` : `${prefix} ${sport}`;
+}
+
 async function handleNextStep(payload?: Partial<Collected>) {
   if (payload) updateCollectedData(payload);
 
-  const idx = stepOrder.indexOf((currentStepName.value as StepName) ?? 'ConfirmStep');
+  const idx = stepOrder.indexOf((currentStepName.value as StepName) ?? 'SportStep');
   const isLast = idx >= stepOrder.length - 1;
 
   if (isLast) {
     try {
       localStorage.setItem('onboardingComplete', 'true');
-      localStorage.setItem(STORAGE.data, JSON.stringify(collectedData.value));
+      localStorage.setItem(STORAGE.data, JSON.stringify(sanitizeForStorage(collectedData.value)));
     } catch {}
-    await router.push('/dashboard');
+
+    // Derive team and sport from selection
+    const selectedLabel = collectedData.value.sports?.[0] || '';
+    const prefix = uni.teamPrefix || uni.name; // e.g., "USF", "UCSD"
+    const teamName = buildTeamName(prefix, selectedLabel);
+    const { sport } = parseSportLabel(selectedLabel);
+
+    await router.push({
+      path: '/dashboard',
+      query: { team: teamName, sport }
+    });
     return;
   }
 
@@ -82,11 +124,10 @@ async function handleNextStep(payload?: Partial<Collected>) {
 }
 
 async function handlePreviousStep() {
-  const idx = stepOrder.indexOf((currentStepName.value as StepName) ?? 'ConfirmStep');
+  const idx = stepOrder.indexOf((currentStepName.value as StepName) ?? 'SportStep');
   const isFirst = idx <= 0;
 
   if (isFirst) {
-    // At the first step → go back to the university landing
     await router.push(`/join/${encodeURIComponent(uni.slug)}`);
     return;
   }
@@ -96,11 +137,10 @@ async function handlePreviousStep() {
 }
 
 onMounted(() => {
-  // Apply university theme and persist slug for later
   applyUniversityTheme(uni);
   try { localStorage.setItem('uniSlug', uni.slug); } catch {}
 
-  // Hydrate data from storage, if present
+  // Hydrate data from storage, if present (password remains blank)
   try {
     const raw = localStorage.getItem(STORAGE.data);
     if (raw) {
@@ -108,7 +148,14 @@ onMounted(() => {
       collectedData.value = {
         university: parsed?.university ?? collectedData.value.university,
         sports: parsed?.sports ?? collectedData.value.sports,
-        notifications: parsed?.notifications ?? collectedData.value.notifications
+        notifications: parsed?.notifications ?? collectedData.value.notifications,
+        account: {
+          firstName: parsed?.account?.firstName || '',
+          lastName: parsed?.account?.lastName || '',
+          email: parsed?.account?.email || '',
+          password: '', // never hydrate password from storage
+          affiliation: parsed?.account?.affiliation || 'Alumni'
+        }
       };
     }
   } catch {}

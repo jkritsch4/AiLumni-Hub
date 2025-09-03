@@ -5,29 +5,20 @@ import OnboardingFlow from '../components/onboarding/OnboardingFlow.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    // University landing (QR/social links)
     {
       path: '/join/:uniSlug',
       name: 'OnboardingLanding',
       component: () => import('../views/OnboardingLanding.vue'),
     },
-
-    // Wizard with ordered child steps
     {
       path: '/onboarding/:uniSlug',
       name: 'OnboardingWizard',
       component: () => import('../views/OnboardingWizard.vue'),
       children: [
-        // Default → first step
         {
           path: '',
           name: 'OnboardingWizardIndex',
-          redirect: { name: 'ConfirmStep' },
-        },
-        {
-          path: 'confirm',
-          name: 'ConfirmStep',
-          component: () => import('../components/onboarding/UniversityConfirmation.vue'),
+          redirect: { name: 'SportStep' },
         },
         {
           path: 'sport',
@@ -39,10 +30,13 @@ const router = createRouter({
           name: 'NotificationsStep',
           component: () => import('../components/onboarding/NotificationPreferences.vue'),
         },
+        {
+          path: 'account',
+          name: 'AccountStep',
+          component: () => import('../components/onboarding/AccountInformation.vue'),
+        },
       ],
     },
-
-    // Legacy root path flow (kept for backwards compatibility)
     {
       path: '/',
       component: OnboardingFlow,
@@ -55,7 +49,6 @@ const router = createRouter({
         }
       }
     },
-
     {
       path: '/dashboard',
       component: Dashboard,

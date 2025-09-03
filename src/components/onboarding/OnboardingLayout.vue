@@ -23,6 +23,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { getUniversityBySlug, applyUniversityTheme } from '../../services/universityTheme'
 
 const props = defineProps<{
   name: string;
@@ -73,8 +74,24 @@ async function resolveLogo() {
   }
 }
 
-onMounted(resolveLogo)
-watch(() => props.logo, resolveLogo)
+// Apply theme as early as possible based on the slug
+function applyThemeFromSlug() {
+  try {
+    const slug = getSlug()
+    const uni = getUniversityBySlug(slug)
+    applyUniversityTheme(uni)
+  } catch (e) {
+    console.warn('[OnboardingLayout] applyUniversityTheme failed:', e)
+  }
+}
+
+// Apply immediately (pre-mount) to avoid first-paint fallback,
+// re-apply whenever the route slug changes.
+applyThemeFromSlug()
+onMounted(() => {
+  resolveLogo()
+})
+watch(() => route.params?.uniSlug, applyThemeFromSlug)
 </script>
 
 <style scoped>
@@ -118,8 +135,6 @@ watch(() => props.logo, resolveLogo)
   justify-content: center;
   gap: 12px;
   backdrop-filter: blur(6px);
-  background: color-mix(in srgb, var(--primary-color, #182B49) 78%, transparent);
-  border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 .logo {
   width: 40px;

@@ -52,6 +52,12 @@ import { DEFAULT_UNIVERSITY, getSportsGroups } from '../../config/universities'
 
 export default {
   name: 'SportSelection',
+  // New: accept props from the wizard wrapper and emit navigation/data events
+  props: {
+    universityData: { type: Object, default: () => ({ name: '', logo: '' }) },
+    selectedData: { type: Object, default: () => ({}) }
+  },
+  emits: ['previous-step', 'next-step', 'update-data'],
   data() {
     return {
       uni: DEFAULT_UNIVERSITY,
@@ -82,6 +88,10 @@ export default {
       console.warn('[SportSelection] applyUniversityTheme failed:', e)
     }
 
+    // Restore a pre-selected sport if present
+    const pre = Array.isArray(this.selectedData?.sports) && this.selectedData.sports[0]
+    if (pre) this.selectedLabel = pre
+
     // We can still fetch logos for future use; not shown in UI.
     this.fetchLogos()
   },
@@ -94,6 +104,8 @@ export default {
     selectSport(sport, gender) {
       this.selectedLabel = this.labelFor(sport, gender)
       this.error = ''
+      // Persist selection immediately so Back/Forward retains state
+      this.$emit('update-data', { sports: [this.selectedLabel] })
     },
     async fetchLogos() {
       try {
@@ -130,7 +142,9 @@ export default {
         this.error = 'Please select a sport to continue'
         return
       }
-      this.$router.push({ name: 'NotificationsStep', params: { uniSlug: this.uni.slug } })
+      // Let the wizard handle routing and history
+      this.$emit('update-data', { sports: [this.selectedLabel] })
+      this.$emit('next-step', { sports: [this.selectedLabel] })
     }
   }
 }

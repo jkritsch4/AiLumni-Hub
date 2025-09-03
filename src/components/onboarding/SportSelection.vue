@@ -47,7 +47,7 @@
 </template>
 
 <script>
-import { getUniversityBySlug } from '../../services/universityTheme'
+import { getUniversityBySlug, applyUniversityTheme } from '../../services/universityTheme'
 import { DEFAULT_UNIVERSITY, getSportsGroups } from '../../config/universities'
 
 export default {
@@ -73,6 +73,15 @@ export default {
     const groups = getSportsGroups(this.uni)
     this.mensSports = groups.mens || []
     this.womensSports = groups.womens || []
+
+    // Apply dynamic onboarding theme immediately
+    try {
+      applyUniversityTheme(this.uni)
+    } catch (e) {
+      // Non-fatal if CSS vars cannot be set yet
+      console.warn('[SportSelection] applyUniversityTheme failed:', e)
+    }
+
     // We can still fetch logos for future use; not shown in UI.
     this.fetchLogos()
   },
@@ -95,188 +104,110 @@ export default {
         const normalize = (remainder) => {
           const r = String(remainder || '').trim()
           if (!r) return []
-          const mens = r.match(/^Men's\s+(.+)/i)
-          if (mens) return [`${mens[1].trim()} (Men's)`]
-          const womens = r.match(/^Women's\s+(.+)/i)
-          if (womens) return [`${womens[1].trim()} (Women's)`]
-          return [r, `${r} (Men's)`, `${r} (Women's)`]
+          return [r.replace(/\s+/g, ' ')]
         }
 
-        const map = {}
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            const team = item?.team_name || ''
-            const logo = item?.team_logo_url || ''
-            if (!team || !logo) continue
-            if (team.startsWith(prefix + ' ')) {
-              const remainder = team.substring(prefix.length + 1).trim()
-              for (const key of normalize(remainder)) map[key] = logo
+        // Left as-is; not rendered currently
+        this.logoByLabel = {}
+        for (const item of data ?? []) {
+          const teamName = String(item?.team_name || '')
+          if (teamName.startsWith(prefix)) {
+            const remainder = teamName.slice(prefix.length).trim()
+            for (const label of normalize(remainder)) {
+              this.logoByLabel[label] = item?.team_logo_url || '/images/default-logo.png'
             }
           }
         }
-        this.logoByLabel = map
       } catch (e) {
         console.warn('[SportSelection] fetchLogos failed:', e)
       }
     },
     goBack() {
-      if (this.$router && this.$route?.name === 'SportStep') {
-        this.$router.push({ name: 'OnboardingLanding', params: { uniSlug: this.$route.params.uniSlug } })
-        return
-      }
       this.$emit('previous-step')
     },
     continueToNextStep() {
       if (!this.selectedLabel) {
-        this.error = 'Please pick a sport to continue.'
+        this.error = 'Please select a sport to continue'
         return
       }
-      if (this.$router && this.$route?.name === 'SportStep') {
-        this.$router.push({
-          name: 'NotificationsStep',
-          params: { uniSlug: this.$route.params.uniSlug },
-          query: { sport: this.selectedLabel }
-        })
-      }
-      this.$emit('next-step', { step: 'sport', data: { selectedSport: this.selectedLabel } })
+      this.$emit('next-step', {
+        step: 'sport',
+        data: { selectedSportLabel: this.selectedLabel }
+      })
     }
   }
 }
 </script>
 
 <style scoped>
-/* Layout */
 .step-container {
-  width: 100%;
-  margin: 0 auto;
+  min-height: 100vh;
+  padding: 2rem 1rem;
   text-align: center;
-  display: grid;
-  gap: 8px;
+  position: relative;
 }
 
-h2 {
-  color: #fff;
-  margin: 4px 0;
-  font-size: clamp(24px, 3.5vw, 36px);
-  font-family: 'Bebas Neue', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.subtitle {
-  color: #ffffff;
-  margin-bottom: 10px;
-  font-size: 1.05rem;
-  opacity: 0.9;
-}
-
-/* Section */
 .group {
-  width: 100%;
-  margin: 12px auto 16px;
-  text-align: center; /* center section heading */
+  margin-top: 1.25rem;
 }
 
 .group-title {
   color: #fff;
-  margin: 0 0 8px 0;
-  font-weight: 800;
+  text-align: left;
+  font-weight: 700;
   letter-spacing: 0.3px;
+  margin: 0.75rem 0 0.5rem;
 }
 
-/* List container – center items */
 .sports-list {
   list-style: none;
-  margin: 0 !important;
-  padding: 0 !important;
-  display: grid !important;
-  gap: 10px !important;
-  justify-items: center !important;  /* center each row */
-
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  overflow: visible !important;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 0;
 }
 
-/* Reset any li defaults */
-.sports-list li {
-  margin: 0 !important;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-}
-
-/* Sport card – 50% of the viewport width, centered, darker translucent tint */
-.sports-list button.sport-card {
-  appearance: none;
-  -webkit-appearance: none;
-
-  width: 50vw;                /* requested: half the screen width */
-  max-width: 560px;           /* keep from getting too large on desktop */
-  border-radius: 14px !important;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;    /* center the text horizontally */
-  padding: 12px 14px;
-
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.28) !important; /* darker, still transparent */
-  border: 1px solid rgba(255, 255, 255, 0.28) !important;
-  color: #fff;
+.sport-card {
+  width: 100%;
   text-align: center;
-
-  cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
-
-  /* neutralize global button styles */
-  box-shadow: none !important;
-  background-image: none !important;
+  background: color-mix(in srgb, var(--primary-color, #182B49) 18%, white);
+  border: 1px solid color-mix(in srgb, var(--secondary-color, #FFCD00) 38%, transparent);
+  color: white;
+  padding: 12px 10px;
+  border-radius: 10px;
+  transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
 }
 
-.sports-list button.sport-card:hover {
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.36) !important;
-  transform: translateY(-1px);
-}
-.sports-list button.sport-card:focus-visible {
-  outline: 2px solid var(--secondary-color, #ffcd00);
-  outline-offset: 2px;
-}
-.sports-list button.sport-card.selected {
-  border-color: var(--secondary-color, #ffcd00) !important;
-  box-shadow: 0 0 0 3px rgba(255,205,0,0.22) !important;
+.sport-card.selected {
+  outline: 2px solid var(--secondary-color, #FFCD00);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary-color, #FFCD00) 30%, transparent);
 }
 
-/* Typography */
-.label { font-size: 1rem; font-weight: 700; text-align: center; }
-
-/* Buttons below */
 .navigation-buttons {
   display: flex;
+  justify-content: space-between;
   gap: 12px;
-  justify-content: center;
-  margin: 8px 0 0;
+  margin-top: 1rem;
 }
 
 .primary-button {
-  background: var(--secondary-color, #ffcd00);
-  color: var(--primary-color, #182B49);
-  border: 2px solid var(--primary-color, #182B49);
-  font-weight: 800;
+  background: var(--secondary-color, #FFCD00);
+  color: #122;
+  border: none;
   padding: 10px 16px;
-  border-radius: 10px;
-  cursor: pointer;
+  border-radius: 9999px;
+  font-weight: 700;
 }
 .secondary-button {
   background: transparent;
   color: #fff;
-  border: 2px solid rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.35);
   padding: 10px 16px;
-  border-radius: 10px;
-  cursor: pointer;
+  border-radius: 9999px;
 }
-.primary-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.error { color: #ffcd00; text-align: center; margin-top: 8px; }
+.error {
+  color: #ff9aa2;
+  margin-top: .75rem;
+}
 </style>

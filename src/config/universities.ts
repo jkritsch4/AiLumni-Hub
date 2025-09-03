@@ -134,3 +134,30 @@ export const DEFAULT_UNIVERSITY: UniversityConfig = {
     'Softball'
   ]
 };
+
+/**
+ * Normalize basic sports arrays into grouped sports if sportsGroups is not provided.
+ * Recognizes "(Men's)" and "(Women's)" suffixes; otherwise places items into mens by default.
+ */
+export function getSportsGroups(uni: UniversityConfig): SportsGroups {
+  if (uni.sportsGroups) return uni.sportsGroups;
+
+  const mens: string[] = [];
+  const womens: string[] = [];
+
+  for (const raw of uni.sports ?? []) {
+    const s = String(raw || '').trim();
+    if (!s) continue;
+
+    const m = s.match(/\((men|men's)\)/i);
+    const w = s.match(/\((women|women's)\)/i);
+
+    const base = s.replace(/\s*\((men|men's|women|women's)\)\s*$/i, '').trim();
+
+    if (w) womens.push(base);
+    else if (m) mens.push(base);
+    else mens.push(base); // default bucket when unspecified
+  }
+
+  return { mens, womens };
+}

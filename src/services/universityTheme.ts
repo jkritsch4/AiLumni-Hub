@@ -1,30 +1,31 @@
 import type { UniversityConfig } from '../config/universities';
 import { DEFAULT_UNIVERSITY, UNIVERSITIES } from '../config/universities';
+import { setThemeColors } from './theme';
 
+/**
+ * Resolve a university by slug using static config.
+ */
 export function getUniversityBySlug(slug?: string | null): UniversityConfig {
   if (!slug) return DEFAULT_UNIVERSITY;
   const key = String(slug).toLowerCase();
   return UNIVERSITIES[key] ?? DEFAULT_UNIVERSITY;
 }
 
+/**
+ * Apply the university's base colors to onboarding (CSS variables).
+ * Respects optional background overlay.
+ */
 export function applyUniversityTheme(u: UniversityConfig): void {
-  const root = document.documentElement;
-  root.style.setProperty('--primary-color', u.colors.primary);
-  root.style.setProperty('--secondary-color', u.colors.secondary);
-
-  // Helpful for translucent borders/gradients if your CSS uses these
-  const [pr, pg, pb] = hexToRgb(u.colors.primary);
-  const [sr, sg, sb] = hexToRgb(u.colors.secondary);
-  root.style.setProperty('--primary-color-rgb', `${pr},${pg},${pb}`);
-  root.style.setProperty('--secondary-color-rgb', `${sr},${sg},${sb}`);
-
-  if (u.colors.backgroundOverlay) {
-    root.style.setProperty('--background-overlay', u.colors.backgroundOverlay);
+  try {
+    setThemeColors({
+      primary: u.colors.primary,
+      secondary: u.colors.secondary
+    });
+    if (typeof document !== 'undefined' && u.colors.backgroundOverlay) {
+      document.documentElement.style.setProperty('--background-overlay', u.colors.backgroundOverlay);
+    }
+  } catch (e) {
+    // Non-fatal: onboarding can still render
+    console.warn('[UniversityTheme] Failed to apply theme:', e);
   }
-}
-
-export function hexToRgb(hex: string): [number, number, number] {
-  const v = hex.replace('#', '');
-  const bigint = parseInt(v.length === 3 ? v.split('').map(c => c + c).join('') : v, 16);
-  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
 }

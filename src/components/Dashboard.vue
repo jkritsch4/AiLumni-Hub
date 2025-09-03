@@ -50,9 +50,12 @@ const emit = defineEmits(['team-logo-loaded', 'team-changed']);
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const teamId = params.get('team_id');
+    const team = params.get('team'); // NEW: accept explicit team names
     const sport = params.get('sport');
 
-    if (teamId) {
+    if (team) {
+      setCurrentTeam(team);
+    } else if (teamId) {
       setCurrentTeamById(teamId);
     }
     if (sport) {
@@ -123,11 +126,15 @@ async function handleNavChange() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const teamId = params.get('team_id');
+    const team = params.get('team'); // NEW
     const sport = params.get('sport');
 
     let changed = false;
 
-    if (teamId) {
+    if (team) {
+      setCurrentTeam(team);
+      changed = true;
+    } else if (teamId) {
       setCurrentTeamById(teamId);
       changed = true;
     }

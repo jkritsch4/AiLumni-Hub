@@ -1,17 +1,31 @@
 <template>
-  <div class="onb">
-    <header class="hdr">
-      <img :src="logo" alt="logo" class="logo" @error="onLogoError" />
-      <h2 class="school">{{ name }}</h2>
+  <div class="onboarding-shell">
+    <div class="bg" aria-hidden="true"></div>
+
+    <header class="header">
+      <img
+        class="logo"
+        :src="logo"
+        :alt="`${name} logo`"
+        @error="onLogoError"
+      />
+      <div class="title">{{ name }}</div>
     </header>
-    <main class="slot">
-      <slot />
+
+    <main class="content" role="main">
+      <div class="content-inner">
+        <slot />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ name: string; logo: string }>();
+const props = defineProps<{
+  name: string;
+  logo: string;
+}>();
+
 function onLogoError(e: Event) {
   const el = e.target as HTMLImageElement;
   el.src = '/images/default-logo.png';
@@ -19,15 +33,86 @@ function onLogoError(e: Event) {
 </script>
 
 <style scoped>
-.onb {
-  min-height: 100vh; position: relative;
-  background-image: url('/images/AiLumniHub.jpg');
-  background-size: cover; background-position: center;
-  padding: 2rem;
+.onboarding-shell {
+  /* Provide a consistent header height we can reuse for scroll padding */
+  --header-h: 56px;
+
+  position: relative;
+  min-height: 100dvh;
+  width: 100%;
+
+  /* Make the SHELL the single scrolling container (modern pattern) */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+
+  /* Ensure scrolling to top reveals content under sticky header cleanly */
+  scroll-padding-top: calc(var(--header-h) + 8px);
+
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background-color: var(--primary-color, #182B49);
 }
-.onb::before { content: ''; position: absolute; inset: 0; background: var(--background-overlay, rgba(24,43,73,0.85)); }
-.hdr { position: relative; z-index: 1; display: grid; justify-items: center; gap: 8px; margin-bottom: 1rem; }
-.logo { width: 80px; height: auto; }
-.school { color: #fff; font-family: 'Bebas Neue', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
-.slot { position: relative; z-index: 1; }
+
+/* Background image + overlay stays fixed behind everything */
+.bg {
+  position: fixed;
+  inset: 0;
+  background-image: url('/images/AiLumniHub.jpg');
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+.bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--background-overlay, rgba(24, 43, 73, 0.85));
+}
+
+/* Sticky header so the logo is always reachable/visible */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+
+  min-height: var(--header-h);
+  padding: 10px 16px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--primary-color, #182B49) 78%, transparent);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.title {
+  color: #fff;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.6px;
+  font-size: clamp(18px, 2.6vw, 22px);
+  text-transform: uppercase;
+}
+
+/* Content area no longer scrolls; it flows inside the shell scroller */
+.content {
+  position: relative;
+  z-index: 1;
+  padding: 16px 12px 24px;
+}
+
+.content-inner {
+  width: min(640px, 100%);
+  margin: 0 auto;
+}
 </style>

@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { applyUniversityTheme, getUniversityBySlug } from '../services/universityTheme';
 import { getTeamData } from '../services/teamService';
@@ -41,7 +41,6 @@ const logoUrl = ref<string>(''); // do not set a visible default to prevent a fl
 const CACHE_KEY = `teamLogo:${uni.slug}`;
 
 // Apply the theme immediately so the first paint uses the correct colors.
-// With your updated theme.ts guard, later default initialization will not override this.
 try {
   applyUniversityTheme(uni);
 } catch (e) {
@@ -49,7 +48,6 @@ try {
 }
 
 function onLogoTagError(e: Event) {
-  // If the visible <img> ever errors after preloading (rare), hard fallback
   const el = e.target as HTMLImageElement;
   el.src = '/images/default-logo.png';
 }
@@ -98,6 +96,9 @@ async function resolveDynamicLogo(): Promise<string> {
 }
 
 onMounted(async () => {
+  // Suppress team theme while onboarding/landing is active
+  if (typeof window !== 'undefined') (window as any).__suppressTeamTheme = true;
+
   // Preload in priority order and only reveal once a valid image is ready
   const dynamicUrl = await resolveDynamicLogo();
   if (await preload(dynamicUrl)) {
@@ -118,9 +119,13 @@ onMounted(async () => {
     logoUrl.value = '/images/default-logo.png';
     showLogo.value = true;
   } else {
-    // If even default fails, reveal nothing (extremely unlikely)
     error.value = 'Unable to load logo.';
   }
+});
+
+onUnmounted(() => {
+  // Allow team theme after leaving onboarding/landing
+  if (typeof window !== 'undefined') (window as any).__suppressTeamTheme = false;
 });
 </script>
 
@@ -148,8 +153,8 @@ onMounted(async () => {
   display: grid;
   grid-template-rows: auto auto auto;
   justify-items: center;
-  gap: 40px;               /* a little air between items */
-  width: min(560px, 92vw); /* less cramped on desktop, fits on mobile */
+  gap: 40px;
+  width: min(560px, 92vw);
   margin: 0 auto;
 }
 

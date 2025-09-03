@@ -14,6 +14,15 @@ export const themeColors = reactive({
   backgroundOverlay: '' as string | undefined
 });
 
+/** Global switch to suppress team theme while in onboarding routes */
+function isTeamThemeSuppressed(): boolean {
+  try {
+    return typeof window !== 'undefined' && (window as any).__suppressTeamTheme === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Resolve a university by slug using static config. */
 export function getUniversityBySlug(slug?: string | null): UniversityConfig {
   if (!slug) return DEFAULT_UNIVERSITY;
@@ -277,6 +286,12 @@ export function normalizeBrandPair(
  */
 export async function loadTeamTheme(teamData: any): Promise<void> {
   console.log('[Theme] Loading team theme:', teamData);
+
+  // Do not allow team theme to override onboarding university branding
+  if (isTeamThemeSuppressed()) {
+    console.log('[Theme] loadTeamTheme suppressed (onboarding route)');
+    return;
+  }
 
   try {
     let info: any = null;

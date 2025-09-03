@@ -12,7 +12,6 @@
 
     <!-- Loading State (dynamic colors + full team name) -->
     <div v-else-if="isLoading" class="loading-state" role="status" aria-live="polite">
-      <!-- Modernized loader: shimmering progress meter instead of spinner -->
       <div class="loading-meter" aria-hidden="true">
         <div class="meter-track"></div>
         <div class="meter-fill"></div>
@@ -42,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import FabNavigation from './components/FabNavigation.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
@@ -66,6 +65,9 @@ const hasError = ref(false);
 const errorMessage = ref('');
 const isOnboardingVisible = ref(true);
 const onboardingComplete = ref(false);
+
+// Track if app init has been executed (to run it after leaving onboarding)
+const didRunAppInit = ref(false);
 
 const teamData = ref<TeamData>({
   team_name: 'UCSD Baseball',
@@ -98,7 +100,7 @@ const resetError = async () => {
   await initializeApp();
 };
 
-// Resolve team BEFORE showing the loader and apply its theme to avoid UCSD flash
+// Resolve team BEFORE showing the loader and apply its theme
 async function resolveInitialTeamAndTheme() {
   try {
     if (typeof window !== 'undefined') {
@@ -137,7 +139,7 @@ async function resolveInitialTeamAndTheme() {
         // Fallback to name-based theme load if info fetch failed
         await loadTeamTheme(activeTeam);
       } else {
-        // Absolute fallback: neutral UCSD only if really nothing known
+        // Absolute fallback
         initializeTheme();
       }
     }
@@ -180,7 +182,6 @@ const initializeApp = async () => {
       onboardingComplete.value = true;
       isOnboardingVisible.value = false;
 
-      // Keep current selected team (URL or cached) stable; don’t let fresh/cached overwrite selection
       const preferredTeam = getCurrentTeam() || teamData.value.team_name;
 
       const cachedData = getCachedTeamData();
@@ -228,14 +229,32 @@ const completeOnboarding = async (data: { sports: string[] }) => {
 };
 
 onMounted(async () => {
-  // 1) Resolve the team and apply its theme BEFORE showing the overlay
+  // Do NOT apply global team theme on onboarding routes; it overrides university branding.
+  if (isOnboardingRoute.value) {
+    if (typeof window !== 'undefined') (window as any).__suppressTeamTheme = true;
+    isLoading.value = false; // ensure page shows without loader
+    return;
+  }
+
+  if (typeof window !== 'undefined') (window as any).__suppressTeamTheme = false;
   await resolveInitialTeamAndTheme();
-  // 2) Continue normal app init
   await initializeApp();
+  didRunAppInit.value = true;
 
   if (typeof window !== 'undefined') {
     (window as any).getCurrentTeam = () => teamData.value.team_name;
     (window as any).getAllTeamsInfo = () => teamData.value;
+  }
+});
+
+// When route changes, keep suppression in sync and run init once after leaving onboarding.
+watch(isOnboardingRoute, async (now, was) => {
+  if (typeof window !== 'undefined') (window as any).__suppressTeamTheme = now === true;
+
+  if (was === true && now === false && !didRunAppInit.value) {
+    await resolveInitialTeamAndTheme();
+    await initializeApp();
+    didRunAppInit.value = true;
   }
 });
 </script>

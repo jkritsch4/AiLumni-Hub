@@ -5,23 +5,29 @@ import OnboardingFlow from '../components/onboarding/OnboardingFlow.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    // New: per-university landing (QR/social links)
+    // University landing (QR/social links)
     {
       path: '/join/:uniSlug',
       name: 'OnboardingLanding',
       component: () => import('../views/OnboardingLanding.vue'),
     },
-    // New: per-university wizard wrapper with child steps
+
+    // Wizard with ordered child steps
     {
       path: '/onboarding/:uniSlug',
       name: 'OnboardingWizard',
       component: () => import('../views/OnboardingWizard.vue'),
       children: [
-        // Named default child → silences the router warning and keeps redirect behavior
+        // Default → first step
         {
           path: '',
           name: 'OnboardingWizardIndex',
-          redirect: { name: 'SportStep' },
+          redirect: { name: 'ConfirmStep' },
+        },
+        {
+          path: 'confirm',
+          name: 'ConfirmStep',
+          component: () => import('../components/onboarding/UniversityConfirmation.vue'),
         },
         {
           path: 'sport',
@@ -36,7 +42,7 @@ const router = createRouter({
       ],
     },
 
-    // Existing routes preserved for legacy onboarding
+    // Legacy root path flow (kept for backwards compatibility)
     {
       path: '/',
       component: OnboardingFlow,
@@ -49,6 +55,7 @@ const router = createRouter({
         }
       }
     },
+
     {
       path: '/dashboard',
       component: Dashboard,
@@ -61,7 +68,10 @@ const router = createRouter({
         }
       }
     }
-  ]
+  ],
+  scrollBehavior() {
+    return { top: 0, behavior: 'smooth' }
+  }
 })
 
 export default router

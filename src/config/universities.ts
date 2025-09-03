@@ -31,7 +31,7 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
     sportsGroups: {
       mens: [
         'Baseball',
-        'Basketball',              // UCSD Men's Basketball resolves via teamPrefix + "Men's Basketball"
+        'Basketball',
         'Cross Country',
         'Fencing',
         'Golf',
@@ -60,76 +60,58 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
     }
   },
 
-  // IMPORTANT: teamPrefix changed to match feed strings like "SF State Baseball"
+  // San Francisco State
   sfsu: {
     slug: 'sfsu',
     name: 'San Francisco State',
     logo: '/images/sfsu-gators.svg',
     colors: {
-      primary: '#3A1A6A',
-      secondary: '#FDB515',
+      primary: '#3A1A6A',   // Purple
+      secondary: '#FDB515', // Gold
       backgroundOverlay: 'rgba(35, 20, 60, 0.85)'
     },
     teamPrefix: 'SF State',
-    sports: [
-      'Baseball',                  // SF State Baseball
-      "Basketball (Men's)",
-      "Basketball (Women's)",
-      'Volleyball',
-      "Soccer (Men's)"
-    ]
+    sportsGroups: {
+      mens: ['Basketball', 'Cross Country', 'Track & Field', 'Wrestling'],
+      womens: ['Basketball', 'Cross Country', 'Soccer', 'Softball', 'Track & Field', 'Volleyball']
+    }
   },
 
-  // University of San Diego (USD) – ensure "USD Baseball" matches
+  // University of San Diego
   usd: {
     slug: 'usd',
     name: 'University of San Diego',
     logo: '/images/default-logo.png',
     colors: {
-      // neutral defaults; team colors from feed can still override in-theme flows
-      primary: '#182B49',
-      secondary: '#FFCD00',
-      backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
+      primary: '#0C5DA5',
+      secondary: '#7FB1E0',
+      backgroundOverlay: 'rgba(12, 93, 165, 0.85)'
     },
     teamPrefix: 'USD',
     sportsGroups: {
-      mens: [
-        'Baseball',                // USD Baseball
-        'Basketball'
-      ],
-      womens: [
-        'Basketball',
-        'Soccer'
-      ]
+      mens: ['Baseball', 'Basketball', 'Cross Country', 'Football', 'Golf', 'Rowing', 'Soccer', 'Tennis'],
+      womens: ['Basketball', 'Beach Volleyball', 'Cross Country', 'Rowing', 'Soccer', 'Softball', 'Swimming & Diving', 'Tennis', 'Track', 'Volleyball']
     }
   },
 
-  // University of San Francisco (USF) – ensure "USF Basketball" matches
+  // University of San Francisco
   usf: {
     slug: 'usf',
     name: 'University of San Francisco',
     logo: '/images/default-logo.png',
     colors: {
-      // neutral defaults; team colors from feed can still override in-theme flows
-      primary: '#182B49',
-      secondary: '#FFCD00',
-      backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
+      primary: '#006747',   // USF Green
+      secondary: '#FDBB30', // USF Gold
+      backgroundOverlay: 'rgba(0, 103, 71, 0.85)'
     },
     teamPrefix: 'USF',
     sportsGroups: {
-      mens: [
-        'Basketball'               // USF Basketball
-      ],
-      womens: [
-        'Basketball'
-      ]
+      mens: ['Baseball', 'Basketball', 'Cross Country', 'Golf', 'Soccer', 'Track & Field'],
+      womens: ['Basketball', 'Beach Volleyball', 'Cross Country', 'Golf', 'Soccer', 'Track & Field', 'Triathlon', 'Volleyball']
     }
   }
-
-  // Add more universities here (one-time setup)
 };
 
-// Reasonable defaults if an unknown slug is used
 export const DEFAULT_UNIVERSITY: UniversityConfig = {
   slug: 'default',
   name: 'AI Alumni Hub',
@@ -140,16 +122,8 @@ export const DEFAULT_UNIVERSITY: UniversityConfig = {
     backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
   },
   sportsGroups: {
-    mens: [
-      'Baseball',
-      'Basketball',
-      'Soccer'
-    ],
-    womens: [
-      'Basketball',
-      'Soccer',
-      'Softball'
-    ]
+    mens: ['Baseball', 'Basketball', 'Soccer'],
+    womens: ['Basketball', 'Soccer', 'Softball']
   },
   sports: [
     'Baseball',
@@ -160,25 +134,3 @@ export const DEFAULT_UNIVERSITY: UniversityConfig = {
     'Softball'
   ]
 };
-
-// Helper to normalize to Men’s/Women’s groups no matter how the university was defined
-export function getSportsGroups(u: UniversityConfig): SportsGroups {
-  if (u.sportsGroups) return u.sportsGroups;
-
-  const arr = u.sports ?? DEFAULT_UNIVERSITY.sports ?? [];
-  const mens: string[] = [];
-  const womens: string[] = [];
-
-  for (const s of arr) {
-    const lower = s.toLowerCase();
-    if (lower.includes("(men")) {
-      mens.push(s.replace(/\s*\(men.*\)\s*/i, '').trim());
-    } else if (lower.includes("(women")) {
-      womens.push(s.replace(/\s*\(women.*\)\s*/i, '').trim());
-    } else {
-      // unisex fallback → list under men's by default
-      mens.push(s);
-    }
-  }
-  return { mens, womens };
-}

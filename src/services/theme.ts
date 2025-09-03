@@ -1,5 +1,7 @@
-// Theme service for dynamic color implementation
+// Theme service for dynamic color implementation with feed-first logic
 import { reactive } from 'vue';
+import type { UniversityConfig } from '../config/universities';
+import { DEFAULT_UNIVERSITY, UNIVERSITIES } from '../config/universities';
 
 // Reactive colors so computed(() => themeColors.primary) updates across the app
 export const themeColors = reactive({
@@ -9,6 +11,22 @@ export const themeColors = reactive({
   text: '#ffffff',
   accent: '#FFB300'
 });
+
+/** Resolve a university by slug using static config. */
+export function getUniversityBySlug(slug?: string | null): UniversityConfig {
+  if (!slug) return DEFAULT_UNIVERSITY;
+  const key = String(slug).toLowerCase();
+  return UNIVERSITIES[key] ?? DEFAULT_UNIVERSITY;
+}
+
+/** Apply a base university theme (safe defaults) */
+export function applyUniversityTheme(u: UniversityConfig): void {
+  setThemeVars({
+    primary: u.colors.primary,
+    secondary: u.colors.secondary,
+    backgroundOverlay: u.colors.backgroundOverlay,
+  });
+}
 
 /**
  * Convert a hex color to an "r, g, b" string for rgba() usage.
@@ -27,6 +45,19 @@ function hexToRgbString(hex?: string | null): string {
   const g = (int >> 8) & 255;
   const b = int & 255;
   return `${r}, ${g}, ${b}`;
+}
+
+/** Low-level: set CSS variables for the current theme. */
+export function setThemeVars(opts: {
+  primary: string;
+  secondary: string;
+  backgroundOverlay?: string;
+}) {
+  // Delegate to setThemeColors so all CSS tokens remain consistent
+  setThemeColors({ primary: opts.primary, secondary: opts.secondary });
+  if (typeof document !== 'undefined' && opts.backgroundOverlay) {
+    document.documentElement.style.setProperty('--background-overlay', opts.backgroundOverlay);
+  }
 }
 
 /**
@@ -65,35 +96,41 @@ function getLuminance(hex?: string | null): number {
   }
 }
 
-/**
- * Optional brand overrides for known schools whose feeds invert colors.
- * Key is a substring match on team name (case-insensitive), e.g., 'ucsd'.
- */
-const BRAND_PRIMARY_OVERRIDES: Array<{ match: RegExp; primary: string; secondary: string }> = [
-  { match: /ucsd|uc san diego/i, primary: '#182B49', secondary: '#FFCD00' },
-  // Add more if needed:
-  // { match: /san francisco|usf/i, primary: '#006341', secondary: '#f4af27' },
-];
-
-/**
- * Normalize a color pair so that the darker color is used as primary (dominant background).
- * 1) If a brand override matches the team name, use it.
- * 2) Else, if primary is much lighter than secondary, swap them.
- */
-function normalizeBrandPair(teamName: string | undefined, inPrimary: string, inSecondary: string) {
-  // Team-specific override
-  const override = BRAND_PRIMARY_OVERRIDES.find(o => teamName && o.match.test(teamName));
-  if (override) {
-    return { primary: override.primary, secondary: override.secondary, reason: 'brand_override' };
+/** Normalize hex to #RRGGBB; return null if invalid */
+function normalizeHex(hex: string): string | null {
+  if (!hex) return null;
+  let v = hex.trim();
+  if (!v.startsWith('#')) v = `#${v}`;
+  const ok = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+  if (!ok) return null;
+  if (v.length === 4) {
+    // #abc -> #aabbcc
+    v = '#' + v.slice(1).split('').map((c) => c + c).join('');
   }
+  return v.toUpperCase();
+}
 
-  // Luminance-based swap (threshold tuned to avoid jitter)
-  const lumP = getLuminance(inPrimary);
-  const lumS = getLuminance(inSecondary);
-  if (lumP > lumS + 0.10) {
-    return { primary: inSecondary, secondary: inPrimary, reason: 'luminance_swap' };
-  }
-  return { primary: inPrimary, secondary: inSecondary, reason: 'as_is' };
+export function hexToRgb(hex: string): [number, number, number] {
+  const v = normalizeHex(hex);
+  if (!v) return [0, 0, 0];
+  const bigint = parseInt(v.slice(1), 16);
+  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+}
+
+function luminance([r, g, b]: [number, number, number]) {
+  const srgb = [r, g, b].map((v) => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+}
+
+function contrastRatio(hex1: string, hex2: string): number {
+  const L1 = luminance(hexToRgb(hex1));
+  const L2 = luminance(hexToRgb(hex2));
+  const bright = Math.max(L1, L2);
+  const dark = Math.min(L1, L2);
+  return (bright + 0.05) / (dark + 0.05);
 }
 
 /**
@@ -165,50 +202,60 @@ export function setThemeColors(colors: Partial<typeof themeColors>) {
   });
 }
 
-/**
- * Initialize theme with default UCSD colors
- */
-export function initializeTheme() {
-  console.log('[Theme] Initializing theme with default UCSD colors');
-  setThemeColors({
-    primary: '#182B49',    // UCSD Blue
-    secondary: '#FFCD00',  // UCSD Gold
-    background: '#182B49',
-    text: '#ffffff',
-    accent: '#FFCD00'
-  });
+/** Extract primary/secondary colors from a team info-like object */
+export function extractColorsFromInfo(info: any): { primary?: string; secondary?: string } {
+  const p = info?.primaryThemeColor ?? info?.primaryColor ?? info?.primary ?? info?.primary_color ?? '';
+  const s = info?.secondaryThemeColor ?? info?.secondaryColor ?? info?.secondary ?? info?.secondary_color ?? '';
+  return { primary: String(p || ''), secondary: String(s || '') };
 }
 
 /**
- * Extract primary/secondary colors from a TeamInfo-like object, supporting multiple field names.
+ * Normalize a pair of colors conservatively:
+ * - Use feed colors if valid and distinct.
+ * - If contrast is poor, try swapping.
+ * - If still poor or invalid, fall back to defaults.
  */
-function extractColorsFromInfo(info: any): { primary?: string; secondary?: string } {
-  const primary =
-    info?.primaryThemeColor ??
-    info?.primary_color ??
-    info?.primaryColor ??
-    info?.brandPrimary ??
-    info?.PrimaryThemeColor;
+export function normalizeBrandPair(
+  teamName: string | undefined,
+  primaryIn: string,
+  secondaryIn: string
+): { primary: string; secondary: string; reason: string } {
+  const defaults = { primary: '#182B49', secondary: '#FFCD00' };
 
-  const secondary =
-    info?.secondaryThemeColor ??
-    info?.secondary_color ??
-    info?.secondaryColor ??
-    info?.brandSecondary ??
-    info?.SecondaryThemeColor;
+  const p = normalizeHex(primaryIn);
+  const s = normalizeHex(secondaryIn);
 
-  return { primary, secondary };
+  if (!p && !s) return { ...defaults, reason: 'both-missing' };
+  if (!p) return { primary: defaults.primary, secondary: s || defaults.secondary, reason: 'primary-missing' };
+  if (!s) return { primary: p, secondary: defaults.secondary, reason: 'secondary-missing' };
+  if (p.toLowerCase() === s.toLowerCase()) return { ...defaults, reason: 'identical' };
+
+  let candidate = { primary: p, secondary: s, reason: 'feed-direct' as const };
+  let cr = contrastRatio(p, s);
+
+  // If contrast is poor, try swapping roles
+  if (cr < 2.2) {
+    const swapped = { primary: s, secondary: p };
+    const crSwapped = contrastRatio(swapped.primary, swapped.secondary);
+    if (crSwapped > cr) {
+      candidate = { ...swapped, reason: 'swapped-for-contrast' };
+      cr = crSwapped;
+    }
+  }
+
+  // If still poor, fall back to defaults
+  if (cr < 1.6) {
+    return { ...defaults, reason: 'poor-contrast-fallback' };
+  }
+
+  return candidate;
 }
 
 /**
- * Load team-specific theme colors.
- * - If a string team name is provided, fetch TeamInfo and apply its colors.
- * - If an object with color fields is provided, apply directly.
- * - Fallback to defaults if no colors found.
+ * Load and apply team theme.
+ * IMPORTANT: We no longer rewrite to UCSD defaults when valid feed colors exist.
  */
-export async function loadTeamTheme(
-  teamData?: { primaryThemeColor?: string; secondaryThemeColor?: string; team_name?: string; [k: string]: any } | string
-): Promise<void> {
+export async function loadTeamTheme(teamData: any): Promise<void> {
   console.log('[Theme] Loading team theme:', teamData);
 
   try {
@@ -216,7 +263,6 @@ export async function loadTeamTheme(
     let teamName: string | undefined;
 
     if (typeof teamData === 'string') {
-      // Try to fetch TeamInfo for the given name
       teamName = teamData;
       try {
         const api = await import('./api');
@@ -261,10 +307,7 @@ export async function loadTeamTheme(
   }
 }
 
-/**
- * Dynamic theme loader that fetches team data and applies colors (returns applied colors).
- * Prefer loadTeamTheme(teamName) directly; this remains for compatibility.
- */
+/** Dynamic theme loader (kept for compatibility) */
 export async function loadDynamicTeamTheme(teamName: string) {
   try {
     console.log('[Theme] Loading dynamic theme for team:', teamName);
@@ -292,9 +335,7 @@ export async function loadDynamicTeamTheme(teamName: string) {
   }
 }
 
-/**
- * Test function to demonstrate dynamic team theming
- */
+/** Example helper to switch team */
 export async function switchTeamTheme(teamName: string) {
   console.log('[Theme] Switching to team theme:', teamName);
   try {
@@ -321,30 +362,24 @@ export async function switchTeamTheme(teamName: string) {
   return null;
 }
 
+/** Initialize defaults (kept neutral; will be overridden after feed resolves) */
+export function initializeTheme() {
+  console.log('[Theme] Initializing theme with default UCSD colors');
+  setThemeColors({
+    primary: '#182B49',
+    secondary: '#FFCD00',
+    background: '#182B49',
+    text: '#ffffff',
+    accent: '#FFCD00'
+  });
+}
+
 // Initialize theme on load
 if (typeof document !== 'undefined') {
   initializeTheme();
 
-  // Add global helpers for quick verification (development only)
+  // Dev helpers
   if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
     (window as any).switchTeamTheme = switchTeamTheme;
-    (window as any).availableTeams = [
-      'UCSD Baseball',
-      'USD Baseball',
-      "UCSD Men's Basketball",
-      "UCSD Men's Golf",
-      'USF Basketball',
-      'SF State Baseball'
-    ];
-    (window as any).debugThemeVars = () => {
-      const cs = getComputedStyle(document.documentElement);
-      console.log('CSS Vars:', {
-        primary: cs.getPropertyValue('--primary-color').trim(),
-        secondary: cs.getPropertyValue('--secondary-color').trim(),
-        backgroundOverlay: cs.getPropertyValue('--background-overlay').trim()
-      });
-    };
-    console.log('[Theme] Development mode: Use switchTeamTheme("Team Name") to test dynamic theming');
-    console.log('[Theme] Available teams:', (window as any).availableTeams);
   }
 }

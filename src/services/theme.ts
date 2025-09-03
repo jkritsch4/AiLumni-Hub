@@ -200,12 +200,24 @@ function applyCssVars() {
   root.style.setProperty('--divider-color', `rgba(${secondaryRgb}, 0.22)`);
 }
 
+/** Mark that an explicit theme (university/team) has been applied */
+function markExplicitThemeApplied() {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  try {
+    root.dataset.themeExplicit = 'true';
+    root.style.setProperty('--theme-explicit', '1');
+  } catch {}
+}
+
 /**
  * Public setter used by the app to update theme colors and CSS variables
  */
 export function setThemeColors(colors: Partial<typeof themeColors>) {
   Object.assign(themeColors, colors);
   applyCssVars();
+  // Flag so later default initialization cannot override explicit theme
+  markExplicitThemeApplied();
 
   console.log('[Theme] Applied dynamic colors:', {
     primary: themeColors.primary,
@@ -374,6 +386,15 @@ export async function switchTeamTheme(teamName: string) {
 
 /** Initialize defaults (kept neutral; will be overridden after feed resolves) */
 export function initializeTheme() {
+  if (typeof document === 'undefined') return;
+
+  const root = document.documentElement;
+  // If an explicit theme has already been applied, never override it with defaults
+  if (root?.dataset?.themeExplicit === 'true') {
+    console.log('[Theme] initializeTheme skipped (explicit theme already applied)');
+    return;
+  }
+
   console.log('[Theme] Initializing theme with default UCSD colors');
   setThemeColors({
     primary: '#182B49',
@@ -385,7 +406,7 @@ export function initializeTheme() {
   });
 }
 
-// Initialize theme on load
+// Initialize theme on load (idempotent: will skip if explicit theme already applied)
 if (typeof document !== 'undefined') {
   initializeTheme();
 

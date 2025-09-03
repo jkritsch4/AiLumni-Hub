@@ -40,6 +40,14 @@ const logoUrl = ref<string>(''); // do not set a visible default to prevent a fl
 
 const CACHE_KEY = `teamLogo:${uni.slug}`;
 
+// Apply the theme immediately so the first paint uses the correct colors.
+// With your updated theme.ts guard, later default initialization will not override this.
+try {
+  applyUniversityTheme(uni);
+} catch (e) {
+  console.warn('[OnboardingLanding] applyUniversityTheme failed:', e);
+}
+
 function onLogoTagError(e: Event) {
   // If the visible <img> ever errors after preloading (rare), hard fallback
   const el = e.target as HTMLImageElement;
@@ -90,8 +98,6 @@ async function resolveDynamicLogo(): Promise<string> {
 }
 
 onMounted(async () => {
-  applyUniversityTheme(uni);
-
   // Preload in priority order and only reveal once a valid image is ready
   const dynamicUrl = await resolveDynamicLogo();
   if (await preload(dynamicUrl)) {

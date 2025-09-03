@@ -1,3 +1,8 @@
+export type SportsGroups = {
+  mens: string[];
+  womens: string[];
+};
+
 export type UniversityConfig = {
   slug: string;
   name: string;
@@ -7,7 +12,12 @@ export type UniversityConfig = {
     secondary: string; // hex
     backgroundOverlay?: string; // optional rgba
   };
-  sports: string[];
+  // Backwards compatible: you can still use a flat sports array
+  sports?: string[];
+  // Preferred: grouped by men's and women's
+  sportsGroups?: SportsGroups;
+  // Used to match API entries like "UCSD Baseball" to extract the sport label
+  teamPrefix?: string;
 };
 
 export const UNIVERSITIES: Record<string, UniversityConfig> = {
@@ -20,14 +30,38 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
       secondary: '#FFCD00',
       backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
     },
-    sports: [
-      'Baseball',
-      "Basketball (Men's)",
-      "Basketball (Women's)",
-      "Soccer (Men's)",
-      "Soccer (Women's)",
-      'Softball'
-    ]
+    teamPrefix: 'UCSD',
+    // Use grouped sports so the onboarding shows Men’s/Women’s lists
+    sportsGroups: {
+      mens: [
+        'Baseball',
+        'Basketball',
+        'Cross Country',
+        'Fencing',
+        'Golf',
+        'Rowing',
+        'Soccer',
+        'Swimming',
+        'Tennis',
+        'Track & Field',
+        'Volleyball',
+        'Water Polo'
+      ],
+      womens: [
+        'Basketball',
+        'Cross Country',
+        'Fencing',
+        'Indoor Track',
+        'Rowing',
+        'Soccer',
+        'Softball',
+        'Swimming',
+        'Tennis',
+        'Track & Field',
+        'Volleyball',
+        'Water Polo'
+      ]
+    }
   },
   sfsu: {
     slug: 'sfsu',
@@ -38,12 +72,13 @@ export const UNIVERSITIES: Record<string, UniversityConfig> = {
       secondary: '#FDB515',
       backgroundOverlay: 'rgba(35, 20, 60, 0.85)'
     },
+    teamPrefix: 'SFSU',
     sports: [
       'Baseball',
-      'Basketball (Men\'s)',
-      'Basketball (Women\'s)',
+      "Basketball (Men's)",
+      "Basketball (Women's)",
       'Volleyball',
-      'Soccer (Men\'s)'
+      "Soccer (Men's)"
     ]
   }
   // Add more universities here (one-time setup)
@@ -59,6 +94,18 @@ export const DEFAULT_UNIVERSITY: UniversityConfig = {
     secondary: '#FFCD00',
     backgroundOverlay: 'rgba(24, 43, 73, 0.85)'
   },
+  sportsGroups: {
+    mens: [
+      'Baseball',
+      'Basketball',
+      'Soccer'
+    ],
+    womens: [
+      'Basketball',
+      'Soccer',
+      'Softball'
+    ]
+  },
   sports: [
     'Baseball',
     "Basketball (Men's)",
@@ -68,3 +115,25 @@ export const DEFAULT_UNIVERSITY: UniversityConfig = {
     'Softball'
   ]
 };
+
+// Helper to normalize to Men’s/Women’s groups no matter how the university was defined
+export function getSportsGroups(u: UniversityConfig): SportsGroups {
+  if (u.sportsGroups) return u.sportsGroups;
+
+  const arr = u.sports ?? DEFAULT_UNIVERSITY.sports ?? [];
+  const mens: string[] = [];
+  const womens: string[] = [];
+
+  for (const s of arr) {
+    const lower = s.toLowerCase();
+    if (lower.includes("(men")) {
+      mens.push(s.replace(/\s*\(men.*\)\s*/i, '').trim());
+    } else if (lower.includes("(women")) {
+      womens.push(s.replace(/\s*\(women.*\)\s*/i, '').trim());
+    } else {
+      // unisex fallback → list under men's by default
+      mens.push(s);
+    }
+  }
+  return { mens, womens };
+}

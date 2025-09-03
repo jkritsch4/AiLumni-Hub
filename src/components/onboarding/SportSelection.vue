@@ -123,28 +123,14 @@ export default {
       }
     },
     goBack() {
-      // Use router for the wizard flow; falls back to history if unavailable
-      if (this.$router && this.uni?.slug) {
-        this.$router.push({ name: 'OnboardingLanding', params: { uniSlug: this.uni.slug } })
-      } else {
-        window.history.back()
-      }
+      this.$emit('previous-step')
     },
     continueToNextStep() {
       if (!this.selectedLabel) {
         this.error = 'Please select a sport to continue'
         return
       }
-      // Router-based wizard: go to the notifications step
-      if (this.$router && this.uni?.slug) {
-        this.$router.push({ name: 'NotificationsStep', params: { uniSlug: this.uni.slug } })
-      } else {
-        // Fallback: emit for legacy container
-        this.$emit('next-step', {
-          step: 'sport',
-          data: { selectedSportLabel: this.selectedLabel }
-        })
-      }
+      this.$router.push({ name: 'NotificationsStep', params: { uniSlug: this.uni.slug } })
     }
   }
 }
@@ -158,51 +144,140 @@ export default {
   position: relative;
 }
 
-.group {
-  margin-top: 1.25rem;
+/* Titles in white */
+.step-container > h2 {
+  color: #fff;
+  font-family: 'Bebas Neue', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 0 0.25rem;
+}
+.subtitle {
+  color: rgba(255,255,255,0.92);
+  margin: 0 0 1rem;
 }
 
+.group { margin-top: 1.25rem; }
+
+/* Center section titles */
 .group-title {
   color: #fff;
-  text-align: left;
+  text-align: center;
   font-weight: 700;
   letter-spacing: 0.3px;
-  margin: 0.75rem 0 0.5rem;
+  margin: 0.75rem 0 0.75rem;
 }
 
+/* Transparent containers */
+.group,
+.sports-list {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.sports-list,
+.sports-list > li {
+  background-color: transparent !important;
+}
+.sports-list::before,
+.sports-list::after,
+.sports-list > li::before,
+.sports-list > li::after {
+  content: none !important;
+}
+
+/* Grid */
 .sports-list {
   list-style: none;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px 12px;
   padding: 0;
   margin: 0;
 }
-
-.sport-card {
-  width: 100%;
-  text-align: center;
-  background: color-mix(in srgb, var(--primary-color, #182B49) 18%, white);
-  border: 1px solid color-mix(in srgb, var(--secondary-color, #FFCD00) 38%, transparent);
-  color: white;
-  padding: 12px 10px;
-  border-radius: 10px;
-  transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+.sports-list > li {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-.sport-card:hover { transform: translateY(-1px); }
+/* Transparent tiles with darker tint */
+.sport-card {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  cursor: pointer;
+  isolation: isolate;
+
+  /* Fallback: rgba tint so pattern remains visible */
+  background-color: rgba(var(--primary-color-rgb, 24,43,73), 0.16);
+  /* Modern: slightly richer mix if supported */
+  background: rgba(var(--primary-color-rgb, 24,43,73), 0.16);
+  background: color-mix(in srgb, var(--primary-color, #182B49) 80%, transparent);
+
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #fff;
+  padding: 14px 12px;
+  border-radius: 16px;
+
+  /* Depth + subtle glass effect to darken behind without hiding pattern */
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
+  -webkit-backdrop-filter: saturate(115%) brightness(0.95);
+  backdrop-filter: saturate(115%) brightness(0.95);
+
+  transition:
+    transform .15s ease,
+    box-shadow .15s ease,
+    border-color .15s ease,
+    background-color .15s ease,
+    opacity .15s ease;
+  min-height: 56px;
+}
+
+/* Text as-is */
+.label { font-weight: 800; letter-spacing: 0.2px; }
+
+/* Hover: slightly stronger tint + lift */
+.sport-card:hover {
+  background-color: rgba(var(--primary-color-rgb, 24,43,73), 0.22);
+  background: rgba(var(--primary-color-rgb, 24,43,73), 0.22);
+  background: color-mix(in srgb, var(--primary-color, #182B49) 28%, transparent);
+
+  border-color: rgba(255,255,255,0.22);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.16);
+}
+
+/* Focus ring */
+.sport-card:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.85),
+    0 0 0 6px var(--ring-secondary, rgba(255,205,0,.45));
+}
+
+/* Active */
+.sport-card:active { transform: translateY(0); }
+
+/* Selected: keep the accent outline, maintain subtle tint */
 .sport-card.selected {
   outline: 2px solid var(--secondary-color, #FFCD00);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary-color, #FFCD00) 30%, transparent);
+  border-color: color-mix(in srgb, var(--secondary-color, #FFCD00) 70%, white);
 }
 
+/* Footer buttons */
 .navigation-buttons {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   margin-top: 1rem;
 }
-
 .primary-button {
   background: var(--secondary-color, #FFCD00);
   color: #122;
@@ -218,8 +293,11 @@ export default {
   padding: 10px 16px;
   border-radius: 9999px;
 }
-.error {
-  color: #ff9aa2;
-  margin-top: .75rem;
+
+.error { color: #ff9aa2; margin-top: .75rem; }
+
+/* One column on small screens */
+@media (max-width: 520px) {
+  .sports-list { grid-template-columns: 1fr; }
 }
 </style>

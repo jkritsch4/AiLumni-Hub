@@ -34,20 +34,17 @@ function onLogoError(e: Event) {
 
 <style scoped>
 .onboarding-shell {
-  /* Provide a consistent header height we can reuse for scroll padding */
+  /* Fixed, full-viewport shell to ensure a single scroll area */
   --header-h: 56px;
-
-  position: relative;
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
   width: 100%;
 
-  /* Make the SHELL the single scrolling container (modern pattern) */
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-
-  /* Ensure scrolling to top reveals content under sticky header cleanly */
   scroll-padding-top: calc(var(--header-h) + 8px);
 
   display: grid;
@@ -104,7 +101,7 @@ function onLogoError(e: Event) {
   text-transform: uppercase;
 }
 
-/* Content area no longer scrolls; it flows inside the shell scroller */
+/* Content flows inside the shell scroller */
 .content {
   position: relative;
   z-index: 1;

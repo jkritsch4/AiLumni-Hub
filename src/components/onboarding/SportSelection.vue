@@ -207,8 +207,8 @@ h2 {
   box-shadow: none !important;
 }
 
-/* Transparent, theme-tinted pill buttons */
-.sport-card {
+/* Transparent, theme-tinted pill buttons with strong overrides to beat globals */
+.sports-list button.sport-card {
   appearance: none;
   -webkit-appearance: none;
 
@@ -219,28 +219,31 @@ h2 {
   gap: 12px;
   padding: 12px 14px;
 
-  /* Dark hue based on the active team's primary color */
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 14px;
+  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.08) !important; /* lighter, truly transparent */
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 14px !important;
   color: #fff;
 
   text-align: left;
   cursor: pointer;
   transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+
+  /* reset any global button ornamentation */
+  box-shadow: none !important;
+  background-image: none !important;
 }
 
-.sport-card:hover {
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.20);
+.sports-list button.sport-card:hover {
+  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.14) !important;
   transform: translateY(-1px);
 }
-.sport-card:focus-visible {
+.sports-list button.sport-card:focus-visible {
   outline: 2px solid var(--secondary-color, #ffcd00);
   outline-offset: 2px;
 }
-.sport-card.selected {
-  border-color: var(--secondary-color, #ffcd00);
-  box-shadow: 0 0 0 3px rgba(255,205,0,0.22);
+.sports-list button.sport-card.selected {
+  border-color: var(--secondary-color, #ffcd00) !important;
+  box-shadow: 0 0 0 3px rgba(255,205,0,0.22) !important;
 }
 
 .label { font-size: 1rem; font-weight: 700; }

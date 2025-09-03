@@ -151,7 +151,6 @@ export default {
 </script>
 
 <style scoped>
-/* This component relies on OnboardingLayout for background/scrolling */
 .step-container {
   width: 100%;
   margin: 0 auto;
@@ -177,9 +176,10 @@ h2 {
 }
 
 .group {
-  width: min(560px, 100%);
+  /* Slightly narrower so cards don’t span the full content width */
+  width: min(520px, 50%);
   margin: 12px auto 16px;
-  text-align: left;
+  text-align: center;
 }
 
 .group-title {
@@ -189,25 +189,30 @@ h2 {
   letter-spacing: 0.3px;
 }
 
-/* Clean, compact list */
+/* Clean, compact list – explicitly defeat global UL styles */
 .sports-list {
   list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 8px;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  gap: 10px !important;
+
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
 }
 
-/* Reset any global list item styles that add borders/boxes */
+/* Reset any global LI styles */
 .sports-list li {
-  margin: 0;
-  padding: 0;
+  margin: 0 !important;
+  padding: 0 !important;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
 }
 
-/* Transparent, theme-tinted pill buttons with strong overrides to beat globals */
+/* Transparent, theme-tinted pill buttons with strong overrides */
 .sports-list button.sport-card {
   appearance: none;
   -webkit-appearance: none;
@@ -219,16 +224,17 @@ h2 {
   gap: 12px;
   padding: 12px 14px;
 
-  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.08) !important; /* lighter, truly transparent */
+  /* Dark hue based on the active team's primary color */
+  background: rgba(var(--primary-color-rgb, 24, 43, 73), 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.16) !important;
   border-radius: 14px !important;
   color: #fff;
 
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
 
-  /* reset any global button ornamentation */
+  /* neutralize any global button decorations */
   box-shadow: none !important;
   background-image: none !important;
 }

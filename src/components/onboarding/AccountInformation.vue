@@ -56,19 +56,18 @@
 
       <label class="row">
         <span class="label">Affiliation</span>
-        <select v-model="local.affiliation" class="input">
+        <select v-model="local.affiliation" class="input select">
           <option value="" disabled>Select affiliation</option>
-          <option value="Student">Student</option>
           <option value="Alumni">Alumni</option>
           <option value="Parent">Parent</option>
-          <option value="Fan">Fan</option>
-          <option value="Staff">Staff</option>
+          <option value="Student">Student</option>
+          <option value="Other">Other</option>
         </select>
       </label>
 
       <div class="navigation-buttons">
         <button class="secondary-button" type="button" @click="goBack">Back</button>
-        <button class="primary-button" type="submit">Save Account Information</button>
+        <button class="primary-button" type="submit">Done</button>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -122,7 +121,6 @@ function saveAndFinish() {
     error = 'Please complete First Name, Last Name, and Email.'
     return
   }
-  // Emit the data to the wizard wrapper. Password will be sanitized before persistence.
   emit('update-data', { account: { ...local } })
   emit('next-step', { account: { ...local } })
 }
@@ -165,12 +163,49 @@ h2 {
   padding: 10px 12px;
   border-radius: 10px;
   outline: none;
+  text-shadow: 0 1px 1px rgba(0,0,0,.35); /* keep text readable on patterned bg */
 }
 .input::placeholder { color: rgba(255,255,255,0.6); }
 .input:focus {
   border-color: rgba(255,255,255,0.45);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary-color, #FFCD00) 30%, transparent);
 }
+
+/* TRANSPARENT, GLASSY SELECT (control) */
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  background: rgba(255,255,255,0.06);              /* transparent to background */
+  border: 1px solid rgba(255,255,255,0.28);
+  color: #fff;
+  color-scheme: dark;                               /* hint to native popups */
+  backdrop-filter: saturate(120%) blur(3px);
+  -webkit-backdrop-filter: saturate(120%) blur(3px);
+}
+
+/* Dropdown list options — semi-transparent instead of black */
+.select option {
+  background-color: color-mix(in srgb, var(--primary-color, #182B49) 78%, transparent);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0,0,0,.35);
+}
+.select option[disabled] {
+  color: rgba(255,255,255,0.7);
+}
+
+/* Active/hover states (supported in most modern browsers) */
+.select option:checked,
+.select option:focus,
+.select option:hover {
+  background-color: color-mix(in srgb, var(--secondary-color, #FFCD00) 22%, transparent);
+  color: #111;
+  text-shadow: none;
+}
+
+/* Hide old IE arrow */
+.select::-ms-expand { display: none; }
 
 .hint a {
   color: var(--secondary-color, #FFCD00);

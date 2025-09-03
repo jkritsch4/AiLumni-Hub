@@ -6,7 +6,10 @@
       <p>{{ errorMessage }}</p>
       <button @click="resetError" class="retry-button">Try Again</button>
     </div>
-    
+
+    <!-- If we are on /join/* or /onboarding/*, render routes -->
+    <RouterView v-else-if="isOnboardingRoute" />
+
     <!-- Loading State (dynamic colors + full team name) -->
     <div v-else-if="isLoading" class="loading-state" role="status" aria-live="polite">
       <!-- Modernized loader: shimmering progress meter instead of spinner -->
@@ -40,6 +43,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import FabNavigation from './components/FabNavigation.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import Dashboard from './components/Dashboard.vue'
@@ -74,6 +78,12 @@ const defaultUniversity = {
 };
 
 const loadingTeamLabel = computed(() => teamData.value?.team_name || 'UCSD Athletics');
+
+// Detect onboarding routes to render routed onboarding UIs instead of legacy overlay
+const route = useRoute();
+const isOnboardingRoute = computed(() =>
+  route.path.startsWith('/join/') || route.path.startsWith('/onboarding/')
+);
 
 const handleError = (error: Error) => {
   console.error('[App] Error caught:', error);

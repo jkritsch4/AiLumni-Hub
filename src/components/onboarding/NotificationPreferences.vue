@@ -49,20 +49,15 @@ export default {
           description: 'Get notified before your team plays'
         },
         {
-          id: 'score-updates',
-          title: 'Score Updates',
-          description: 'Receive live score updates during games'
+          id: 'game-results',
+          title: 'Game Results',
+          description: 'Receive post-game scores'
         },
         {
           id: 'news',
-          title: 'Team News',
-          description: 'Stay updated with the latest team news'
+          title: 'Conference Standings Updates',
+          description: 'Stay updated with the latest conference standings (weekly)'
         },
-        {
-          id: 'highlights',
-          title: 'Game Highlights',
-          description: 'Get post-game highlights and summaries'
-        }
       ]
     }
   },

@@ -17,6 +17,12 @@ const router = createRouter({
       name: 'OnboardingWizard',
       component: () => import('../views/OnboardingWizard.vue'),
       children: [
+        // Named default child → silences the router warning and keeps redirect behavior
+        {
+          path: '',
+          name: 'OnboardingWizardIndex',
+          redirect: { name: 'SportStep' },
+        },
         {
           path: 'sport',
           name: 'SportStep',
@@ -27,8 +33,6 @@ const router = createRouter({
           name: 'NotificationsStep',
           component: () => import('../components/onboarding/NotificationPreferences.vue'),
         },
-        // Default child route → sport step
-        { path: '', redirect: { name: 'SportStep' } },
       ],
     },
 

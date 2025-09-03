@@ -121,14 +121,14 @@ onMounted(async () => {
 <style scoped>
 .landing {
   min-height: 100vh;
-  background-image: url('/images/AiLumniHub.jpg');
-  background-size: cover;
-  background-position: center;
+  /* Primary is the main background */
+  background: var(--primary-color, #182B49);
   position: relative;
   display: grid;
   place-items: center;
   padding: 2rem;
 }
+/* The overlay sits above the primary background */
 .landing::before {
   content: '';
   position: absolute; inset: 0;
@@ -142,7 +142,7 @@ onMounted(async () => {
   display: grid;
   grid-template-rows: auto auto auto;
   justify-items: center;
-  gap: 14px;               /* a little air between items */
+  gap: 40px;               /* a little air between items */
   width: min(560px, 92vw); /* less cramped on desktop, fits on mobile */
   margin: 0 auto;
 }
@@ -179,7 +179,7 @@ onMounted(async () => {
   border: 2px solid var(--primary-color, #182B49);
   font-weight: 800;
   padding: 12px 18px;
-  border-radius: 10px;
+  border-radius: 15px;
   cursor: pointer;
   display: inline-block;
 }

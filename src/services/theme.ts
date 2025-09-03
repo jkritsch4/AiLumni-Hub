@@ -9,7 +9,9 @@ export const themeColors = reactive({
   secondary: '#FFCD00',  // Default UCSD Gold
   background: '#182B49',
   text: '#ffffff',
-  accent: '#FFB300'
+  accent: '#FFB300',
+  // Optional overlay; when set, applyCssVars will use this exact value
+  backgroundOverlay: '' as string | undefined
 });
 
 /** Resolve a university by slug using static config. */
@@ -54,10 +56,12 @@ export function setThemeVars(opts: {
   backgroundOverlay?: string;
 }) {
   // Delegate to setThemeColors so all CSS tokens remain consistent
-  setThemeColors({ primary: opts.primary, secondary: opts.secondary });
-  if (typeof document !== 'undefined' && opts.backgroundOverlay) {
-    document.documentElement.style.setProperty('--background-overlay', opts.backgroundOverlay);
-  }
+  setThemeColors({
+    primary: opts.primary,
+    secondary: opts.secondary,
+    // carry through an explicit overlay if provided
+    ...(opts.backgroundOverlay ? { backgroundOverlay: opts.backgroundOverlay } : {})
+  });
 }
 
 /**
@@ -145,6 +149,9 @@ function applyCssVars() {
   root.style.setProperty('--primary-color', themeColors.primary);
   root.style.setProperty('--secondary-color', themeColors.secondary);
 
+  // Main background token used by app shell and onboarding
+  root.style.setProperty('--background-color', themeColors.primary);
+
   // RGB variants for effects
   const primaryRgb = hexToRgbString(themeColors.primary);
   const secondaryRgb = hexToRgbString(themeColors.secondary);
@@ -167,8 +174,12 @@ function applyCssVars() {
   root.style.setProperty('--secondary-15a', `rgba(${secondaryRgb}, 0.15)`);
   root.style.setProperty('--secondary-10a', `rgba(${secondaryRgb}, 0.10)`);
 
-  // Background overlay with primary color and transparency (used by page backdrop)
-  root.style.setProperty('--background-overlay', `${themeColors.primary}dd`);
+  // Background overlay: prefer explicit overlay, else tint of primary
+  const overlay =
+    themeColors.backgroundOverlay && String(themeColors.backgroundOverlay).trim()
+      ? String(themeColors.backgroundOverlay)
+      : `${themeColors.primary}dd`;
+  root.style.setProperty('--background-overlay', overlay);
 
   // FAB / accents (secondary color)
   root.style.setProperty('--fab-color', themeColors.secondary);
@@ -210,10 +221,8 @@ export function extractColorsFromInfo(info: any): { primary?: string; secondary?
 }
 
 /**
- * Normalize a pair of colors conservatively:
- * - Use feed colors if valid and distinct.
- * - If contrast is poor, try swapping.
- * - If still poor or invalid, fall back to defaults.
+ * Normalize a pair of colors such that the darker color becomes primary,
+ * ensuring the app background remains dark. If contrast is very poor, fall back.
  */
 export function normalizeBrandPair(
   teamName: string | undefined,
@@ -230,20 +239,19 @@ export function normalizeBrandPair(
   if (!s) return { primary: p, secondary: defaults.secondary, reason: 'secondary-missing' };
   if (p.toLowerCase() === s.toLowerCase()) return { ...defaults, reason: 'identical' };
 
-  let candidate = { primary: p, secondary: s, reason: 'feed-direct' as const };
-  let cr = contrastRatio(p, s);
+  // Choose the darker color as primary so main background is dark
+  const lumP = getLuminance(p);
+  const lumS = getLuminance(s);
+  const darkerIsPrimary = lumP <= lumS;
 
-  // If contrast is poor, try swapping roles
-  if (cr < 2.2) {
-    const swapped = { primary: s, secondary: p };
-    const crSwapped = contrastRatio(swapped.primary, swapped.secondary);
-    if (crSwapped > cr) {
-      candidate = { ...swapped, reason: 'swapped-for-contrast' };
-      cr = crSwapped;
-    }
-  }
+  let candidate = {
+    primary: darkerIsPrimary ? p : s,
+    secondary: darkerIsPrimary ? s : p,
+    reason: darkerIsPrimary ? 'darker-as-primary' : 'swapped-darker-as-primary'
+  };
 
-  // If still poor, fall back to defaults
+  // If contrast is extremely poor, fall back to defaults
+  const cr = contrastRatio(candidate.primary, candidate.secondary);
   if (cr < 1.6) {
     return { ...defaults, reason: 'poor-contrast-fallback' };
   }
@@ -253,7 +261,7 @@ export function normalizeBrandPair(
 
 /**
  * Load and apply team theme.
- * IMPORTANT: We no longer rewrite to UCSD defaults when valid feed colors exist.
+ * IMPORTANT: We now normalize to keep the darker color as primary.
  */
 export async function loadTeamTheme(teamData: any): Promise<void> {
   console.log('[Theme] Loading team theme:', teamData);
@@ -285,12 +293,14 @@ export async function loadTeamTheme(teamData: any): Promise<void> {
 
     const normalized = normalizeBrandPair(teamName, inPrimary, inSecondary);
 
+    // Clear explicit overlay to derive from the current primary unless a later call sets one
     setThemeColors({
       primary: normalized.primary,
       secondary: normalized.secondary,
       background: normalized.primary,
       text: '#ffffff',
-      accent: normalized.secondary
+      accent: normalized.secondary,
+      backgroundOverlay: undefined
     });
 
     console.log('[Theme] Applied team theme colors', {
@@ -370,7 +380,8 @@ export function initializeTheme() {
     secondary: '#FFCD00',
     background: '#182B49',
     text: '#ffffff',
-    accent: '#FFCD00'
+    accent: '#FFCD00',
+    backgroundOverlay: undefined
   });
 }
 

@@ -123,17 +123,28 @@ export default {
       }
     },
     goBack() {
-      this.$emit('previous-step')
+      // Use router for the wizard flow; falls back to history if unavailable
+      if (this.$router && this.uni?.slug) {
+        this.$router.push({ name: 'OnboardingLanding', params: { uniSlug: this.uni.slug } })
+      } else {
+        window.history.back()
+      }
     },
     continueToNextStep() {
       if (!this.selectedLabel) {
         this.error = 'Please select a sport to continue'
         return
       }
-      this.$emit('next-step', {
-        step: 'sport',
-        data: { selectedSportLabel: this.selectedLabel }
-      })
+      // Router-based wizard: go to the notifications step
+      if (this.$router && this.uni?.slug) {
+        this.$router.push({ name: 'NotificationsStep', params: { uniSlug: this.uni.slug } })
+      } else {
+        // Fallback: emit for legacy container
+        this.$emit('next-step', {
+          step: 'sport',
+          data: { selectedSportLabel: this.selectedLabel }
+        })
+      }
     }
   }
 }
@@ -179,6 +190,7 @@ export default {
   transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
 }
 
+.sport-card:hover { transform: translateY(-1px); }
 .sport-card.selected {
   outline: 2px solid var(--secondary-color, #FFCD00);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--secondary-color, #FFCD00) 30%, transparent);

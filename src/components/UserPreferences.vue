@@ -301,7 +301,7 @@ async function saveAccountInfo() {
 .pref-card button,
 .pref-card .btn,
 .pref-card .link {
-  font-family: 'Arial', sans-serif;
+  font-family: 'sans-serif', sans-serif;
 }
 
 /* Card styling (dark transparent hue, matches Fundraising aesthetic) */

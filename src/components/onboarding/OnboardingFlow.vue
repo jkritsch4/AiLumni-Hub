@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import OnboardingLayout from './OnboardingLayout.vue'
-import UniversityConfirmation from './UniversityConfirmation.vue'
+import UniversityConfirmation from './AccountInformation.vue'
 import SportSelection from './SportSelection.vue'
 import NotificationPreferences from './NotificationPreferences.vue'
 
@@ -18,6 +18,9 @@ type Collected = {
   university: { name: string; logo: string };
   sports: string[];
   notifications: { scores: boolean; scheduling: boolean; news: boolean };
+  // Add team and sport so they can be relayed to backend
+  team?: string;
+  sport?: string;
 };
 
 const props = defineProps<OnboardingProps>();
@@ -40,7 +43,9 @@ const currentStepIndex = ref(0);
 const collectedData = ref<Collected>({
   university: { ...props.defaultUniversity }, // overwritten by confirmation step
   sports: ['UCSD Baseball'],
-  notifications: { scores: true, scheduling: true, news: true }
+  notifications: { scores: true, scheduling: true, news: true },
+  team: undefined,
+  sport: undefined
 });
 
 // Derive the current step component
@@ -79,7 +84,17 @@ let syncingRoute = false;
 
 // Update collected data and persist
 function updateCollectedData(data: Partial<Collected>) {
-  collectedData.value = { ...collectedData.value, ...data };
+  // Add team and sport to collectedData if sports is set
+  const patch: Partial<Collected> = { ...data };
+  if (data.sports && Array.isArray(data.sports) && data.sports[0]) {
+    // Derive canonical team and sport
+    const selectedLabel = data.sports[0];
+    const universityPrefix = collectedData.value.university?.name || props.defaultUniversity.name || '';
+    const parsed = parseSportLabel(selectedLabel);
+    patch.sport = parsed.sport;
+    patch.team = buildTeamName(universityPrefix, selectedLabel);
+  }
+  collectedData.value = { ...collectedData.value, ...patch };
   try { localStorage.setItem(STORAGE.data, JSON.stringify(collectedData.value)); } catch {}
 }
 
@@ -93,6 +108,9 @@ async function handleNextStep(data?: Partial<Collected>) {
       localStorage.setItem('onboardingComplete', 'true');
       localStorage.setItem(STORAGE.data, JSON.stringify(collectedData.value));
     } catch {}
+
+    // TODO: POST collectedData (including team and sport) to backend here!
+
     await router.push('/dashboard');
     return;
   }
@@ -116,6 +134,25 @@ async function handlePreviousStep() {
   }
 }
 
+// --- New helpers for sport/team ---
+function parseSportLabel(label: string): { sport: string; gender: "Men's" | "Women's" | '' } {
+  if (!label) return { sport: 'Baseball', gender: '' };
+  const m = label.match(/^(.+?)\s*\((Men's|Women's)\)\s*$/i);
+  if (m) return { sport: capitalize(m[1].trim()), gender: m[2] as "Men's" | "Women's" };
+  return { sport: capitalize(label.trim()), gender: '' };
+}
+function capitalize(s: string) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+function buildTeamName(prefix: string, selectedLabel: string): string {
+  const { sport, gender } = parseSportLabel(selectedLabel);
+  if (sport.toLowerCase() === 'baseball') {
+    return `${prefix} Baseball`;
+  }
+  return gender ? `${prefix} ${gender} ${sport}` : `${prefix} ${sport}`;
+}
+// ---
+
 // Initial load: hydrate from storage and sync with URL
 onMounted(async () => {
   // Hydrate data
@@ -123,12 +160,20 @@ onMounted(async () => {
     const raw = localStorage.getItem(STORAGE.data);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Merge defensively to keep shape
-      updateCollectedData({
+      // Merge defensively to keep shape, and add team/sport if possible
+      const patch: Partial<Collected> = {
         university: parsed?.university ?? collectedData.value.university,
         sports: parsed?.sports ?? collectedData.value.sports,
         notifications: parsed?.notifications ?? collectedData.value.notifications
-      });
+      };
+      if (patch.sports && Array.isArray(patch.sports) && patch.sports[0]) {
+        const selectedLabel = patch.sports[0];
+        const universityPrefix = patch.university?.name || props.defaultUniversity.name || '';
+        const parsedSport = parseSportLabel(selectedLabel);
+        patch.sport = parsedSport.sport;
+        patch.team = buildTeamName(universityPrefix, selectedLabel);
+      }
+      updateCollectedData(patch);
     }
   } catch {
     // ignore storage errors

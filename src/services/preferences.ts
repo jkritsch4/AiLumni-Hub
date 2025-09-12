@@ -13,6 +13,9 @@ export type UserPreferences = {
   notifications?: NotificationPrefs;
   account?: Omit<AccountInfo, 'password'>;
   updatedAt?: string;
+  // Add team and sport fields here for clarity
+  team?: string;
+  sport?: string;
 };
 
 // Default to your Invoke URL if env var is not set (used in production)
@@ -120,11 +123,17 @@ function normalizeFromBackend(userId: string, data: any): UserPreferences {
     data?.notifications ??
     fromLegacyNotificationTypes(data?.notification_types, data?.reminderHours);
 
+  // Add team and sport into normalized object if present
+  const team = data?.team ?? data?.subscribed_team ?? undefined;
+  const sport = data?.sport ?? undefined;
+
   return {
     userId,
     account,
     notifications,
-    updatedAt: data?.updatedAt
+    updatedAt: data?.updatedAt,
+    team,
+    sport
   };
 }
 
@@ -170,6 +179,15 @@ export async function saveUserPreferences(userId: string, delta: Partial<UserPre
   }
   if ((current as any)?.subscribed_teams) payload.subscribed_teams = (current as any)?.subscribed_teams;
   if ((current as any)?.phone_number)    payload.phone_number    = (current as any)?.phone_number;
+
+  // ---- NEW: Always include team and sport if present ----
+  // Prefer delta, fall back to next (which is merged state), else undefined
+  payload.team = (delta.team !== undefined ? delta.team : next.team) || undefined;
+  payload.sport = (delta.sport !== undefined ? delta.sport : next.sport) || undefined;
+  // Clean up: if still undefined, don't send
+  if (payload.team === undefined) delete payload.team;
+  if (payload.sport === undefined) delete payload.sport;
+  // -------------------------------------------------------
 
   const { path } = makeUrls(userId);
 
